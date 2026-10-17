@@ -83,13 +83,23 @@ router.post('/', requireAdmin, (req, res) => {
       return res.status(400).json({ error: 'Detailed task description is required (between 5 and 5000 characters).' });
     }
 
+    // Multi-strategy employee lookup: ID, username, or legacy mapping
+    let assignee = null;
     const assigneeId = parseInt(assigned_to, 10);
-    if (!assigneeId) {
-      return res.status(400).json({ error: 'Please select an employee to assign this work to.' });
+    if (!isNaN(assigneeId) && assigneeId > 0) {
+      assignee = db.prepare("SELECT id, name, username, status, department FROM users WHERE id = ?").get(assigneeId);
+    }
+    if (!assignee && assigned_to) {
+      const cleanUser = String(assigned_to).trim().toLowerCase();
+      assignee = db.prepare("SELECT id, name, username, status, department FROM users WHERE LOWER(username) = ?").get(cleanUser);
+    }
+    if (!assignee && !isNaN(assigneeId)) {
+      const legacyMap = { 5: 'prashetha', 6: 'chethana', 9: 'chethana', 7: 'surya', 10: 'surya', 8: 'harish', 11: 'harish' };
+      if (legacyMap[assigneeId]) {
+        assignee = db.prepare("SELECT id, name, username, status, department FROM users WHERE LOWER(username) = ?").get(legacyMap[assigneeId]);
+      }
     }
 
-    // Verify assignee exists and is approved
-    const assignee = db.prepare("SELECT id, name, username, status, department FROM users WHERE id = ?").get(assigneeId);
     if (!assignee) {
       return res.status(404).json({ error: 'Selected employee does not exist.' });
     }
@@ -113,7 +123,7 @@ router.post('/', requireAdmin, (req, res) => {
       title.trim(),
       description.trim(),
       cleanPriority,
-      assigneeId,
+      assignee.id,
       req.user.id,
       cleanDueDate,
       cleanCategory

@@ -117,32 +117,26 @@ function verifyPassword(password, hash, salt) {
 }
 
 // Seed Initial Admin and Foundational Employee Accounts
+// Seed Initial Admin and Foundational Employee Accounts with deterministic IDs
 function seedAccounts() {
-  const findUserStmt = db.prepare('SELECT id FROM users WHERE username = ?');
   const insertUserStmt = db.prepare(`
-    INSERT INTO users (name, username, password_hash, salt, role, department, status, approved_at)
-    VALUES (?, ?, ?, ?, ?, ?, 'approved', CURRENT_TIMESTAMP)
+    INSERT OR REPLACE INTO users (id, name, username, password_hash, salt, role, department, status, approved_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', CURRENT_TIMESTAMP)
   `);
 
-  // Seed Admins: joshua, kishore, jason, akshay
-  for (const admin of config.admins) {
-    const existing = findUserStmt.get(admin.username.toLowerCase());
-    if (!existing) {
-      const { hash, salt } = hashPassword(config.adminDefaultPassword);
-      insertUserStmt.run(admin.name, admin.username.toLowerCase(), hash, salt, 'admin', admin.department);
-      console.log(`[Seed] Created admin account: ${admin.username}`);
-    }
-  }
+  // Seed Admins: 1: joshua, 2: kishore, 3: jason, 4: akshay
+  config.admins.forEach((admin, idx) => {
+    const fixedId = idx + 1;
+    const { hash, salt } = hashPassword(config.adminDefaultPassword);
+    insertUserStmt.run(fixedId, admin.name, admin.username.toLowerCase(), hash, salt, 'admin', admin.department);
+  });
 
-  // Seed Foundational Employees: prashetha, chethana, surya, harish
-  for (const emp of config.employees) {
-    const existing = findUserStmt.get(emp.username.toLowerCase());
-    if (!existing) {
-      const { hash, salt } = hashPassword(config.employeeDefaultPassword);
-      insertUserStmt.run(emp.name, emp.username.toLowerCase(), hash, salt, 'employee', emp.department);
-      console.log(`[Seed] Created employee account: ${emp.username} (${emp.department})`);
-    }
-  }
+  // Seed Foundational Employees: 5: prashetha, 6: chethana, 7: surya, 8: harish
+  config.employees.forEach((emp, idx) => {
+    const fixedId = idx + 5;
+    const { hash, salt } = hashPassword(config.employeeDefaultPassword);
+    insertUserStmt.run(fixedId, emp.name, emp.username.toLowerCase(), hash, salt, 'employee', emp.department);
+  });
 }
 
 seedAccounts();
