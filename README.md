@@ -22,22 +22,22 @@
 ## 👥 Pre-Configured Roster & Credentials
 
 ### Executive Administrators
-| Username | Name | Default Passphrase | Role |
-| :--- | :--- | :--- | :--- |
-| `joshua` | J. Joshua | `Admin@TetraSync2026!` | CTO / Executive Admin |
-| `kishore` | B. Kishore | `Admin@TetraSync2026!` | CEO / Executive Admin |
-| `jason` | A. Jason Kister | `Admin@TetraSync2026!` | COO / Executive Admin |
-| `akshay` | Akshay Kumar | `Admin@TetraSync2026!` | Co-CTO / Executive Admin |
+| Username | Name | Role |
+| :--- | :--- | :--- |
+| `joshua` | J. Joshua | CTO / Executive Admin |
+| `kishore` | B. Kishore | CEO / Executive Admin |
+| `jason` | A. Jason Kister | COO / Executive Admin |
+| `akshay` | Akshay Kumar | Co-CTO / Executive Admin |
 
 ### Foundational Team Members
-| Username | Name | Initial Password | Role / Department |
-| :--- | :--- | :--- | :--- |
-| `prashetha` | Prashetha | `Employee@2026!` | Web management |
-| `chethana` | Chethana | `Employee@2026!` | Digital marketing |
-| `surya` | Surya | `Employee@2026!` | Cyber Security |
-| `harish` | Harish | `Employee@2026!` | Designer |
+| Username | Name | Role / Department |
+| :--- | :--- | :--- |
+| `prashetha` | Prashetha | Web management |
+| `chethana` | Chethana | Digital marketing |
+| `surya` | Surya | Cyber Security |
+| `harish` | Harish | Designer |
 
-*(Credentials are configurable in `.env`)*
+*(Initial credentials are configurable via environment variables in `.env`)*
 
 ---
 
