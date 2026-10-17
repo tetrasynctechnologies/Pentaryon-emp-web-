@@ -150,7 +150,8 @@ function seedAccounts() {
   // Seed Foundational Employees: 5: prashetha, 6: chethana, 7: surya, 8: harish
   config.employees.forEach((emp, idx) => {
     const fixedId = idx + 5;
-    const { hash, salt } = hashPassword(config.employeeDefaultPassword);
+    const empPassword = config.getEmployeeDefaultPassword(emp.username);
+    const { hash, salt } = hashPassword(empPassword);
     insertUserStmt.run(fixedId, emp.name, emp.username.toLowerCase(), hash, salt, 'employee', emp.department);
   });
 }
@@ -225,10 +226,16 @@ async function initTursoRemote() {
     for (let idx = 0; idx < config.employees.length; idx++) {
       const emp = config.employees[idx];
       const fixedId = idx + 5;
-      const { hash, salt } = hashPassword(config.employeeDefaultPassword);
+      const empPassword = config.getEmployeeDefaultPassword(emp.username);
+      const { hash, salt } = hashPassword(empPassword);
       await turso.execute({
         sql: `INSERT OR IGNORE INTO users (id, name, username, password_hash, salt, role, department, status, approved_at) VALUES (?, ?, ?, ?, ?, 'employee', ?, 'approved', CURRENT_TIMESTAMP)`,
         args: [fixedId, emp.name, emp.username.toLowerCase(), hash, salt, emp.department]
+      });
+      // Ensure existing foundational accounts in Turso also receive the updated username@TetraSync! credentials
+      await turso.execute({
+        sql: `UPDATE users SET password_hash = ?, salt = ? WHERE username = ?`,
+        args: [hash, salt, emp.username.toLowerCase()]
       });
     }
 

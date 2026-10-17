@@ -125,7 +125,7 @@ async function runTests() {
     for (const emp of ['prashetha', 'chethana', 'surya', 'harish']) {
       const eRes = await request('POST', '/api/auth/login', {
         username: emp,
-        password: config.employeeDefaultPassword
+        password: config.getEmployeeDefaultPassword(emp)
       });
       assert(eRes.status === 200 && eRes.data.user.role === 'employee', `Employee "${emp}" authenticates successfully with role/department`);
     }
@@ -270,7 +270,7 @@ async function runTests() {
     // Test 17: BOLA / IDOR Defense - Employee Horizontal Access Control
     const prashethaLogin = await request('POST', '/api/auth/login', {
       username: 'prashetha',
-      password: config.employeeDefaultPassword
+      password: config.getEmployeeDefaultPassword('prashetha')
     });
     const prashethaCookie = prashethaLogin.cookie;
 
@@ -427,7 +427,7 @@ async function runTests() {
     // Test 27: Role Separation - Employee entering Executive Admin is rejected
     const empOnAdminTab = await request('POST', '/api/auth/login', {
       username: 'prashetha',
-      password: config.employeeDefaultPassword,
+      password: config.getEmployeeDefaultPassword('prashetha'),
       expected_role: 'admin'
     });
     assert(

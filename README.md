@@ -30,14 +30,14 @@
 | `akshay` | Akshay Kumar | Co-CTO / Executive Admin |
 
 ### Foundational Team Members
-| Username | Name | Role / Department |
-| :--- | :--- | :--- |
-| `prashetha` | Prashetha | Web management |
-| `chethana` | Chethana | Digital marketing |
-| `surya` | Surya | Cyber Security |
-| `harish` | Harish | Designer |
+| Username | Name | Role / Department | Default Password |
+| :--- | :--- | :--- | :--- |
+| `prashetha` | Prashetha | Web management | `prashetha@TetraSync!` |
+| `chethana` | Chethana | Digital marketing | `chethana@TetraSync!` |
+| `surya` | Surya | Cyber Security | `surya@TetraSync!` |
+| `harish` | Harish | Designer | `harish@TetraSync!` |
 
-*(Initial credentials are configurable via environment variables in `.env`)*
+> **Note**: For Employee Access, initial and standard credentials follow the pattern: `<username>@TetraSync!` (e.g. `maya@TetraSync!`). Admins authenticate with `Admin@TetraSync2026!`. Initial credentials can be customized in `.env`.
 
 ---
 

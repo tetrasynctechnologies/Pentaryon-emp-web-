@@ -38,5 +38,12 @@ module.exports = {
   ],
 
   adminDefaultPassword: process.env.ADMIN_DEFAULT_PASSWORD || 'Admin@TetraSync2026!',
-  employeeDefaultPassword: process.env.EMPLOYEE_DEFAULT_PASSWORD || 'Employee@2026!'
+  employeeDefaultPassword: process.env.EMPLOYEE_DEFAULT_PASSWORD || 'username@TetraSync!',
+  getEmployeeDefaultPassword(username) {
+    if (process.env.EMPLOYEE_DEFAULT_PASSWORD && process.env.EMPLOYEE_DEFAULT_PASSWORD !== 'username@TetraSync!') {
+      return process.env.EMPLOYEE_DEFAULT_PASSWORD;
+    }
+    const clean = String(username || '').trim().toLowerCase();
+    return `${clean}@TetraSync!`;
+  }
 };
