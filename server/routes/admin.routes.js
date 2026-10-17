@@ -1,5 +1,5 @@
 const express = require('express');
-const { db } = require('../db');
+const { db, syncTurso } = require('../db');
 const { requireAuth, requireAdmin } = require('../auth');
 const { sanitizeLogText } = require('../security');
 
@@ -39,7 +39,11 @@ router.post('/requests/:id/approve', (req, res) => {
       return res.status(400).json({ error: 'Invalid user ID.' });
     }
 
-    const user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
+    let user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
+    if (!user) {
+      try { syncTurso(true); } catch (_) {}
+      user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
+    }
     if (!user) {
       return res.status(404).json({ error: 'User registration request not found.' });
     }
@@ -82,7 +86,11 @@ router.post('/requests/:id/reject', (req, res) => {
       return res.status(400).json({ error: 'Invalid user ID.' });
     }
 
-    const user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
+    let user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
+    if (!user) {
+      try { syncTurso(true); } catch (_) {}
+      user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
+    }
     if (!user) {
       return res.status(404).json({ error: 'User registration request not found.' });
     }
@@ -124,7 +132,11 @@ router.delete('/requests/:id', (req, res) => {
       return res.status(400).json({ error: 'Invalid user ID.' });
     }
 
-    const user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
+    let user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
+    if (!user) {
+      try { syncTurso(true); } catch (_) {}
+      user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
+    }
     if (!user) {
       return res.status(404).json({ error: 'User registration request not found.' });
     }
@@ -197,7 +209,11 @@ router.delete('/employees/:id', (req, res) => {
       return res.status(400).json({ error: 'You cannot delete your own account.' });
     }
 
-    const employee = db.prepare('SELECT id, name, username, role FROM users WHERE id = ?').get(userId);
+    let employee = db.prepare('SELECT id, name, username, role FROM users WHERE id = ?').get(userId);
+    if (!employee) {
+      try { syncTurso(true); } catch (_) {}
+      employee = db.prepare('SELECT id, name, username, role FROM users WHERE id = ?').get(userId);
+    }
     if (!employee) {
       return res.status(404).json({ error: 'Employee not found.' });
     }
@@ -242,7 +258,11 @@ router.patch('/employees/:id', (req, res) => {
       return res.status(400).json({ error: 'Invalid employee ID.' });
     }
 
-    const employee = db.prepare('SELECT id, name, username, role, department FROM users WHERE id = ?').get(userId);
+    let employee = db.prepare('SELECT id, name, username, role, department FROM users WHERE id = ?').get(userId);
+    if (!employee) {
+      try { syncTurso(true); } catch (_) {}
+      employee = db.prepare('SELECT id, name, username, role, department FROM users WHERE id = ?').get(userId);
+    }
     if (!employee) {
       return res.status(404).json({ error: 'Employee not found.' });
     }
