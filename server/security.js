@@ -156,12 +156,15 @@ function originGuard(req, res, next) {
 
   // 2. Origin & Referer matching host
   const origin = req.headers.origin || req.headers.referer;
-  const host = req.headers.host;
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
 
   if (origin && host) {
     try {
       const originUrl = new URL(origin);
-      if (originUrl.host !== host) {
+      const isLocal = (originUrl.hostname === 'localhost' || originUrl.hostname === '127.0.0.1') &&
+                      (host.startsWith('localhost') || host.startsWith('127.0.0.1'));
+      const isVercel = originUrl.hostname.endsWith('.vercel.app') && host.endsWith('.vercel.app');
+      if (originUrl.host !== host && !isLocal && !isVercel) {
         return res.status(403).json({ error: 'Cross-Site Request Blocked: Origin mismatch detected.' });
       }
     } catch (_) {

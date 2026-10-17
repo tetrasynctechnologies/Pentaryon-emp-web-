@@ -67,7 +67,7 @@ app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Public Metadata for frontend dropdowns & brand info
-app.get('/api/meta', (req, res) => {
+app.get(['/api/meta', '/meta'], (req, res) => {
   res.json({
     departments: config.standardDepartments,
     company: 'TetraSync Technologies',
@@ -75,13 +75,22 @@ app.get('/api/meta', (req, res) => {
   });
 });
 
-// CSRF / Origin Guard on mutative API requests
-app.use('/api', originGuard);
+// Root API ping / health
+app.get(['/api', '/api/health', '/health'], (req, res) => {
+  res.json({
+    status: 'ok',
+    system: 'TetraSync Technologies Workplace Gate',
+    version: '1.0.0'
+  });
+});
 
-// Mount Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/tasks', tasksRoutes);
+// CSRF / Origin Guard on mutative API requests
+app.use(['/api', '/auth', '/admin', '/tasks'], originGuard);
+
+// Mount Routes (dual mounted to guarantee matching regardless of serverless path rewriting)
+app.use(['/api/auth', '/auth'], authRoutes);
+app.use(['/api/admin', '/admin'], adminRoutes);
+app.use(['/api/tasks', '/tasks'], tasksRoutes);
 
 // Legal pages explicit routes
 app.get('/terms', (req, res) => {
