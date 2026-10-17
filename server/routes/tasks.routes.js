@@ -1,5 +1,5 @@
 const express = require('express');
-const { db } = require('../db');
+const { db, syncTurso } = require('../db');
 const { requireAuth, requireAdmin } = require('../auth');
 const { sanitizeLogText } = require('../security');
 
@@ -153,6 +153,8 @@ router.post('/', requireAdmin, (req, res) => {
       WHERE t.id = ?
     `).get(taskId);
 
+    try { syncTurso(true); } catch (_) {}
+
     return res.status(201).json({
       success: true,
       message: `Work assigned successfully to ${assignee.name}.`,
@@ -171,11 +173,11 @@ router.post('/', requireAdmin, (req, res) => {
 router.get('/:id', (req, res) => {
   try {
     const taskId = parseInt(req.params.id, 10);
-    if (!taskId) {
+    if (isNaN(taskId) || !taskId) {
       return res.status(400).json({ error: 'Invalid task ID.' });
     }
 
-    const task = db.prepare(`
+    let task = db.prepare(`
       SELECT 
         t.id, t.title, t.description, t.priority, t.status, t.progress_percent,
         t.due_date, t.category, t.created_at, t.updated_at,
@@ -186,6 +188,22 @@ router.get('/:id', (req, res) => {
       JOIN users u_creator ON t.assigned_by = u_creator.id
       WHERE t.id = ?
     `).get(taskId);
+
+    // If not found in local replica, attempt explicit sync from Turso primary
+    if (!task) {
+      try { syncTurso(true); } catch (_) {}
+      task = db.prepare(`
+        SELECT 
+          t.id, t.title, t.description, t.priority, t.status, t.progress_percent,
+          t.due_date, t.category, t.created_at, t.updated_at,
+          u_assignee.id AS assignee_id, u_assignee.name AS assignee_name, u_assignee.username AS assignee_username, u_assignee.department AS assignee_department,
+          u_creator.id AS creator_id, u_creator.name AS creator_name
+        FROM tasks t
+        JOIN users u_assignee ON t.assigned_to = u_assignee.id
+        JOIN users u_creator ON t.assigned_by = u_creator.id
+        WHERE t.id = ?
+      `).get(taskId);
+    }
 
     if (!task) {
       return res.status(404).json({ error: 'Task not found.' });
@@ -223,11 +241,16 @@ router.patch('/:id/progress', (req, res) => {
     const taskId = parseInt(req.params.id, 10);
     const { status, progress_percent, note, due_date } = req.body;
 
-    if (!taskId) {
+    if (isNaN(taskId) || !taskId) {
       return res.status(400).json({ error: 'Invalid task ID.' });
     }
 
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+    let task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+    if (!task) {
+      try { syncTurso(true); } catch (_) {}
+      task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+    }
+
     if (!task) {
       return res.status(404).json({ error: 'Task not found.' });
     }
@@ -303,6 +326,8 @@ router.patch('/:id/progress', (req, res) => {
       sanitizeLogText(`User ${req.user.username} updated task #${taskId}: status=${newStatus}, progress=${newProgress}%${dueChanged ? `, due_date=${newDueDate}` : ''}`)
     );
 
+    try { syncTurso(true); } catch (_) {}
+
     return res.json({
       success: true,
       message: 'Work progress updated successfully!',
@@ -326,11 +351,16 @@ router.patch('/:id/progress', (req, res) => {
 router.delete('/:id', requireAdmin, (req, res) => {
   try {
     const taskId = parseInt(req.params.id, 10);
-    if (!taskId) {
+    if (isNaN(taskId) || !taskId) {
       return res.status(400).json({ error: 'Invalid task ID.' });
     }
 
-    const task = db.prepare('SELECT id, title FROM tasks WHERE id = ?').get(taskId);
+    let task = db.prepare('SELECT id, title FROM tasks WHERE id = ?').get(taskId);
+    if (!task) {
+      try { syncTurso(true); } catch (_) {}
+      task = db.prepare('SELECT id, title FROM tasks WHERE id = ?').get(taskId);
+    }
+
     if (!task) {
       return res.status(404).json({ error: 'Task not found.' });
     }
@@ -341,6 +371,8 @@ router.delete('/:id', requireAdmin, (req, res) => {
       INSERT INTO audit_logs (action, actor_id, target_id, details)
       VALUES ('TASK_DELETED', ?, ?, ?)
     `).run(req.user.id, taskId, sanitizeLogText(`Admin ${req.user.username} deleted task #${taskId} ("${task.title}")`));
+
+    try { syncTurso(true); } catch (_) {}
 
     return res.json({ success: true, message: 'Task deleted successfully.' });
   } catch (err) {

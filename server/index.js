@@ -90,11 +90,11 @@ app.get(['/api', '/api/health', '/health'], (req, res) => {
 app.use(['/api', '/auth', '/admin', '/tasks'], originGuard);
 
 // Sync with Turso cloud primary when enabled
-app.use(['/api', '/auth', '/admin', '/tasks'], async (req, res, next) => {
-  await syncTurso();
+app.use(['/api', '/auth', '/admin', '/tasks'], (req, res, next) => {
+  try { syncTurso(); } catch (_) {}
   res.on('finish', () => {
     if (['POST', 'PATCH', 'DELETE', 'PUT'].includes(req.method)) {
-      syncTurso(true).catch(() => {});
+      try { syncTurso(true); } catch (_) {}
     }
   });
   next();

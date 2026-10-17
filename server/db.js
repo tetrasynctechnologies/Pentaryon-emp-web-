@@ -1,47 +1,123 @@
-const { DatabaseSync } = require('node:sqlite');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const config = require('./config');
-const { createClient } = require('@libsql/client');
 
 // Ensure database directory exists
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 
-// Initialize SQLite database
-const db = new DatabaseSync(config.dbPath);
-
-// Enable WAL mode & foreign keys for high performance & integrity
-db.exec(`
-  PRAGMA journal_mode = WAL;
-  PRAGMA foreign_keys = ON;
-`);
-
-// Optional Turso client for remote replication across serverless instances
-let tursoClient = null;
-if (config.tursoUrl && config.tursoAuthToken) {
-  try {
-    tursoClient = createClient({
-      url: 'file:' + config.dbPath,
-      syncUrl: config.tursoUrl,
-      authToken: config.tursoAuthToken
-    });
-    console.log('[Turso] Initialized embedded replica with primary:', config.tursoUrl);
-  } catch (err) {
-    console.error('[Turso Init Error]', err);
-  }
+let DatabaseEngine;
+try {
+  DatabaseEngine = require('libsql');
+} catch (_) {
+  DatabaseEngine = require('node:sqlite').DatabaseSync;
 }
 
+let rawDb = null;
+let isTursoActive = false;
+
+if (config.tursoUrl && config.tursoAuthToken && typeof DatabaseEngine === 'function') {
+  try {
+    rawDb = new DatabaseEngine(config.dbPath, {
+      syncUrl: config.tursoUrl,
+      authToken: config.tursoAuthToken,
+      readYourWrites: true
+    });
+    try {
+      rawDb.sync();
+    } catch (syncErr) {
+      console.warn('[Turso Initial Sync Warning]', syncErr.message);
+    }
+    isTursoActive = true;
+    console.log('[Turso] Initialized native embedded replica with primary:', config.tursoUrl);
+  } catch (openErr) {
+    console.warn('[Turso Open Warning]', openErr.message, '- recreating local replica file...');
+    try {
+      if (fs.existsSync(config.dbPath)) fs.unlinkSync(config.dbPath);
+      if (fs.existsSync(config.dbPath + '-wal')) fs.unlinkSync(config.dbPath + '-wal');
+      if (fs.existsSync(config.dbPath + '-shm')) fs.unlinkSync(config.dbPath + '-shm');
+    } catch (_) {}
+
+    try {
+      rawDb = new DatabaseEngine(config.dbPath, {
+        syncUrl: config.tursoUrl,
+        authToken: config.tursoAuthToken,
+        readYourWrites: true
+      });
+      try {
+        rawDb.sync();
+      } catch (syncErr) {
+        console.warn('[Turso Sync Warning after recreation]', syncErr.message);
+      }
+      isTursoActive = true;
+      console.log('[Turso] Successfully recreated and connected embedded replica:', config.tursoUrl);
+    } catch (fallbackErr) {
+      console.error('[Turso Fallback to local SQLite]', fallbackErr.message);
+      rawDb = new DatabaseEngine(config.dbPath);
+    }
+  }
+} else {
+  rawDb = new DatabaseEngine(config.dbPath);
+}
+
+// Wrapper for clean API & metadata stripping
+const db = {
+  rawDb,
+  exec(sql) {
+    return rawDb.exec(sql);
+  },
+  sync() {
+    if (isTursoActive && typeof rawDb.sync === 'function') {
+      try {
+        return rawDb.sync();
+      } catch (err) {
+        console.warn('[Turso Sync Warning]', err.message);
+      }
+    }
+  },
+  prepare(sql) {
+    const stmt = rawDb.prepare(sql);
+    return {
+      run(...args) {
+        return stmt.run(...args);
+      },
+      get(...args) {
+        const row = stmt.get(...args);
+        if (row && typeof row === 'object' && '_metadata' in row) {
+          delete row._metadata;
+        }
+        return row;
+      },
+      all(...args) {
+        const rows = stmt.all(...args);
+        if (Array.isArray(rows)) {
+          for (let i = 0; i < rows.length; i++) {
+            if (rows[i] && typeof rows[i] === 'object' && '_metadata' in rows[i]) {
+              delete rows[i]._metadata;
+            }
+          }
+        }
+        return rows;
+      }
+    };
+  }
+};
+
+// Enable foreign keys & WAL mode
+try {
+  db.exec('PRAGMA foreign_keys = ON;');
+} catch (_) {}
+
 let lastSyncTime = 0;
-async function syncTurso(force = false) {
-  if (!tursoClient) return;
+function syncTurso(force = false) {
+  if (!isTursoActive || !rawDb || typeof rawDb.sync !== 'function') return;
   const now = Date.now();
-  if (!force && now - lastSyncTime < 5000) return; // Debounce 5s
+  if (!force && now - lastSyncTime < 2000) return; // Debounce 2s
   lastSyncTime = now;
   try {
-    await tursoClient.sync();
+    rawDb.sync();
   } catch (err) {
-    console.error('[Turso Sync Error]', err.message);
+    console.warn('[Turso Sync Error]', err.message);
   }
 }
 
@@ -145,7 +221,6 @@ function verifyPassword(password, hash, salt) {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
-// Seed Initial Admin and Foundational Employee Accounts
 // Seed Initial Admin and Foundational Employee Accounts with deterministic IDs
 function seedAccounts() {
   const insertUserStmt = db.prepare(`
@@ -169,6 +244,9 @@ function seedAccounts() {
 }
 
 seedAccounts();
+if (isTursoActive) {
+  syncTurso(true);
+}
 
 module.exports = {
   db,
