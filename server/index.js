@@ -49,7 +49,8 @@ app.use(
       try {
         const originUrl = new URL(origin);
         const isLocal = originUrl.hostname === 'localhost' || originUrl.hostname === '127.0.0.1';
-        if (isLocal) {
+        const isVercel = originUrl.hostname.endsWith('.vercel.app');
+        if (isLocal || isVercel) {
           return callback(null, true);
         }
       } catch (_) {}

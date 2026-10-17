@@ -5,7 +5,7 @@ module.exports = {
   port: parseInt(process.env.PORT, 10) || 3000,
   env: process.env.NODE_ENV || 'development',
   sessionSecret: process.env.SESSION_SECRET || 'tetrasync_work_portal_secure_session_token_key_2026_x89a',
-  dbPath: path.resolve(process.env.DB_PATH || 'data/work_portal.db'),
+  dbPath: path.resolve(process.env.DB_PATH || (process.env.VERCEL ? '/tmp/work_portal.db' : 'data/work_portal.db')),
   
   // Pre-configured Administrators
   admins: [
