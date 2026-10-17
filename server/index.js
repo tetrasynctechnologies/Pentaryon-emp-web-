@@ -6,7 +6,7 @@ const cookieParser = require('cookie-parser');
 const config = require('./config');
 
 // Initialize database & tables
-require('./db');
+const { syncTurso } = require('./db');
 
 const authRoutes = require('./routes/auth.routes');
 const adminRoutes = require('./routes/admin.routes');
@@ -71,6 +71,7 @@ app.get(['/api/meta', '/meta'], (req, res) => {
   res.json({
     departments: config.standardDepartments,
     company: 'TetraSync Technologies',
+    storage: (config.tursoUrl && config.tursoAuthToken) ? 'turso' : 'sqlite',
     admins: config.admins.map(a => ({ name: a.name, username: a.username, department: a.department }))
   });
 });
@@ -80,12 +81,24 @@ app.get(['/api', '/api/health', '/health'], (req, res) => {
   res.json({
     status: 'ok',
     system: 'TetraSync Technologies Workplace Gate',
-    version: '1.0.0'
+    version: '1.0.0',
+    storage: (config.tursoUrl && config.tursoAuthToken) ? 'turso' : 'sqlite'
   });
 });
 
 // CSRF / Origin Guard on mutative API requests
 app.use(['/api', '/auth', '/admin', '/tasks'], originGuard);
+
+// Sync with Turso cloud primary when enabled
+app.use(['/api', '/auth', '/admin', '/tasks'], async (req, res, next) => {
+  await syncTurso();
+  res.on('finish', () => {
+    if (['POST', 'PATCH', 'DELETE', 'PUT'].includes(req.method)) {
+      syncTurso(true).catch(() => {});
+    }
+  });
+  next();
+});
 
 // Mount Routes (dual mounted to guarantee matching regardless of serverless path rewriting)
 app.use(['/api/auth', '/auth'], authRoutes);

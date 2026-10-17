@@ -6,6 +6,8 @@ module.exports = {
   env: process.env.NODE_ENV || 'development',
   sessionSecret: process.env.SESSION_SECRET || 'tetrasync_work_portal_secure_session_token_key_2026_x89a',
   dbPath: path.resolve(process.env.DB_PATH || (process.env.VERCEL ? '/tmp/work_portal.db' : 'data/work_portal.db')),
+  tursoUrl: process.env.TURSO_DATABASE_URL || process.env.STORAGE_TURSO_DATABASE_URL || process.env.STORAGE_DATABASE_URL || process.env.TURSO_URL || process.env.STORAGE_URL,
+  tursoAuthToken: process.env.TURSO_AUTH_TOKEN || process.env.STORAGE_TURSO_AUTH_TOKEN || process.env.STORAGE_AUTH_TOKEN || process.env.TURSO_TOKEN,
   
   // Pre-configured Administrators
   admins: [

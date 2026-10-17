@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const config = require('./config');
+const { createClient } = require('@libsql/client');
 
 // Ensure database directory exists
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
@@ -15,6 +16,34 @@ db.exec(`
   PRAGMA journal_mode = WAL;
   PRAGMA foreign_keys = ON;
 `);
+
+// Optional Turso client for remote replication across serverless instances
+let tursoClient = null;
+if (config.tursoUrl && config.tursoAuthToken) {
+  try {
+    tursoClient = createClient({
+      url: 'file:' + config.dbPath,
+      syncUrl: config.tursoUrl,
+      authToken: config.tursoAuthToken
+    });
+    console.log('[Turso] Initialized embedded replica with primary:', config.tursoUrl);
+  } catch (err) {
+    console.error('[Turso Init Error]', err);
+  }
+}
+
+let lastSyncTime = 0;
+async function syncTurso(force = false) {
+  if (!tursoClient) return;
+  const now = Date.now();
+  if (!force && now - lastSyncTime < 5000) return; // Debounce 5s
+  lastSyncTime = now;
+  try {
+    await tursoClient.sync();
+  } catch (err) {
+    console.error('[Turso Sync Error]', err.message);
+  }
+}
 
 // Create Schema
 db.exec(`
@@ -144,5 +173,6 @@ seedAccounts();
 module.exports = {
   db,
   hashPassword,
-  verifyPassword
+  verifyPassword,
+  syncTurso
 };
