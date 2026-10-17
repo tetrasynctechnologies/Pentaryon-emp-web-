@@ -231,8 +231,12 @@ function admin() {
   ];
 
   const body = {
-    q: () =>
-      pend.length
+    q: () => `
+      <div class="row" style="margin-bottom:12px; justify-content:space-between">
+        <span class="mu">${pend.length} pending clearance${pend.length === 1 ? '' : 's'}</span>
+        <button class="ghost" data-a="ref" title="Refresh clearance queue">${ic('clock')} Refresh</button>
+      </div>
+      ${pend.length
         ? `<div class="grid">${pend
             .map(
               (u) => `
@@ -253,7 +257,8 @@ function admin() {
         `
             )
             .join('')}</div>`
-        : '<p class="mu">Clearance queue is empty. All employee accounts are verified.</p>',
+        : '<p class="mu">Clearance queue is empty. All employee accounts are verified.</p>'}
+    `,
     t: () => `
       <div class="row" style="margin-bottom:12px">
         <span class="mu">${S.T.length} assignments</span>
@@ -482,10 +487,14 @@ const act = {
     ),
   ap: async (d) => {
     try {
-      await api(`/api/admin/requests/${d.id}/approve`, { method: 'POST' });
-      await loadDataAndRender();
+      await api(`/api/admin/requests/${d.id}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({ username: d.u })
+      });
     } catch (err) {
       alert(err.message);
+    } finally {
+      await loadDataAndRender();
     }
   },
   rj: (d) =>
@@ -494,12 +503,16 @@ const act = {
         `
       <input type="hidden" name="req_id" value="${esc(d.id)}">
       <input type="hidden" name="id" value="${esc(d.id)}">
+      <input type="hidden" name="username" value="${esc(d.u)}">
       <label>Reason (shown to applicant)</label>
       <textarea name="r" rows="3" required placeholder="Identity unconfirmed with HR"></textarea>
       <div class="alert cr" id="rf-er" hidden style="margin-top:12px"></div>
       <div class="act" style="margin-top:16px"><button class="no" style="width:100%">Confirm Rejection</button></div>
     </form>`
     ),
+  ref: async () => {
+    await loadDataAndRender();
+  },
   nt: () =>
     open(
       mh('New Assignment', 'tk') +
@@ -763,15 +776,15 @@ document.addEventListener('submit', async (e) => {
 
   if (formId === 'rf') {
     const id = v('req_id') || v('id');
+    const u = v('username');
     const r = v('r');
     const er = $('#rf-er');
     try {
       await api(`/api/admin/requests/${id}/reject`, {
         method: 'POST',
-        body: JSON.stringify({ reason: r })
+        body: JSON.stringify({ reason: r, username: u })
       });
       close();
-      await loadDataAndRender();
     } catch (err) {
       if (er) {
         er.hidden = false;
@@ -779,6 +792,8 @@ document.addEventListener('submit', async (e) => {
       } else {
         alert(err.message);
       }
+    } finally {
+      await loadDataAndRender();
     }
   }
 

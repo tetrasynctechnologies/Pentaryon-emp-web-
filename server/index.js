@@ -6,7 +6,7 @@ const cookieParser = require('cookie-parser');
 const config = require('./config');
 
 // Initialize database & tables
-const { syncTurso } = require('./db');
+const { syncTurso, flushTurso } = require('./db');
 
 const authRoutes = require('./routes/auth.routes');
 const adminRoutes = require('./routes/admin.routes');
@@ -94,6 +94,18 @@ app.use(['/api', '/auth', '/admin', '/tasks'], async (req, res, next) => {
   try {
     await syncTurso();
   } catch (_) {}
+  next();
+});
+
+// Ensure all Turso cloud mutations are flushed before finishing HTTP responses in serverless
+app.use(['/api', '/auth', '/admin', '/tasks'], (req, res, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = async function (data) {
+    try {
+      await flushTurso();
+    } catch (_) {}
+    return originalJson(data);
+  };
   next();
 });
 

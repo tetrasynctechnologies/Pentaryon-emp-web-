@@ -30,40 +30,118 @@ router.get('/requests', async (req, res) => {
 });
 
 /**
+ * Helper: Resolve a user request by numeric ID, username, or body payload with fallback cloud sync
+ */
+async function findRequestUser(paramId, bodyUsername = null) {
+  let user = null;
+  const numId = parseInt(paramId, 10);
+  const cleanParam = (paramId && typeof paramId === 'string') ? paramId.trim().toLowerCase() : '';
+  const cleanBodyUser = (bodyUsername && typeof bodyUsername === 'string') ? bodyUsername.trim().toLowerCase() : '';
+
+  // 1. Try by numeric ID
+  if (!isNaN(numId) && numId > 0) {
+    user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(numId);
+  }
+
+  // 2. Try by username from body
+  if (!user && cleanBodyUser) {
+    user = db.prepare('SELECT id, name, username, status FROM users WHERE LOWER(username) = ?').get(cleanBodyUser);
+  }
+
+  // 3. Try by param as username
+  if (!user && cleanParam && isNaN(numId)) {
+    user = db.prepare('SELECT id, name, username, status FROM users WHERE LOWER(username) = ?').get(cleanParam);
+  }
+
+  // 4. Fallback: Force cloud pull from Turso and retry
+  if (!user) {
+    try {
+      await syncTurso(true);
+    } catch (_) {}
+
+    if (!isNaN(numId) && numId > 0) {
+      user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(numId);
+    }
+    if (!user && cleanBodyUser) {
+      user = db.prepare('SELECT id, name, username, status FROM users WHERE LOWER(username) = ?').get(cleanBodyUser);
+    }
+    if (!user && cleanParam && isNaN(numId)) {
+      user = db.prepare('SELECT id, name, username, status FROM users WHERE LOWER(username) = ?').get(cleanParam);
+    }
+  }
+
+  return user;
+}
+
+/**
+ * Helper: Resolve an employee user by numeric ID, username, or body payload
+ */
+async function findEmployeeUser(paramId, bodyUsername = null) {
+  let user = null;
+  const numId = parseInt(paramId, 10);
+  const cleanParam = (paramId && typeof paramId === 'string') ? paramId.trim().toLowerCase() : '';
+  const cleanBodyUser = (bodyUsername && typeof bodyUsername === 'string') ? bodyUsername.trim().toLowerCase() : '';
+
+  if (!isNaN(numId) && numId > 0) {
+    user = db.prepare('SELECT id, name, username, role, department FROM users WHERE id = ?').get(numId);
+  }
+  if (!user && cleanBodyUser) {
+    user = db.prepare('SELECT id, name, username, role, department FROM users WHERE LOWER(username) = ?').get(cleanBodyUser);
+  }
+  if (!user && cleanParam && isNaN(numId)) {
+    user = db.prepare('SELECT id, name, username, role, department FROM users WHERE LOWER(username) = ?').get(cleanParam);
+  }
+
+  if (!user) {
+    try {
+      await syncTurso(true);
+    } catch (_) {}
+
+    if (!isNaN(numId) && numId > 0) {
+      user = db.prepare('SELECT id, name, username, role, department FROM users WHERE id = ?').get(numId);
+    }
+    if (!user && cleanBodyUser) {
+      user = db.prepare('SELECT id, name, username, role, department FROM users WHERE LOWER(username) = ?').get(cleanBodyUser);
+    }
+    if (!user && cleanParam && isNaN(numId)) {
+      user = db.prepare('SELECT id, name, username, role, department FROM users WHERE LOWER(username) = ?').get(cleanParam);
+    }
+  }
+
+  return user;
+}
+
+/**
  * POST /api/admin/requests/:id/approve
  * Approve employee account request
  */
 router.post('/requests/:id/approve', async (req, res) => {
   try {
-    const userId = parseInt(req.params.id, 10);
-    if (!userId) {
-      return res.status(400).json({ error: 'Invalid user ID.' });
-    }
+    const username = req.body?.username || req.query?.username;
+    let user = await findRequestUser(req.params.id, username);
 
-    let user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
     if (!user) {
-      try { await syncTurso(true); } catch (_) {}
-      user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
-    }
-    if (!user) {
-      return res.status(404).json({ error: 'User registration request not found.' });
+      return res.status(404).json({ error: 'User registration request not found or already processed.' });
     }
 
     if (user.status === 'approved') {
-      return res.status(400).json({ error: 'This user account is already approved.' });
+      return res.json({
+        success: true,
+        message: `Account for ${user.name} (@${user.username}) is already approved. The employee can now sign in.`
+      });
     }
 
     db.prepare(`
       UPDATE users
       SET status = 'approved', approved_at = CURRENT_TIMESTAMP, approved_by = ?, rejection_reason = NULL
       WHERE id = ?
-    `).run(req.user.id, userId);
+    `).run(req.user.id, user.id);
 
     // Audit log
     db.prepare(`
       INSERT INTO audit_logs (action, actor_id, target_id, details)
       VALUES ('REGISTRATION_APPROVED', ?, ?, ?)
-    `).run(req.user.id, userId, sanitizeLogText(`Admin ${req.user.username} approved account for ${user.username} (${user.name})`));
+    `).run(req.user.id, user.id, sanitizeLogText(`Admin ${req.user.username} approved account for ${user.username} (${user.name})`));
 
     return res.json({
       success: true,
@@ -81,19 +159,11 @@ router.post('/requests/:id/approve', async (req, res) => {
  */
 router.post('/requests/:id/reject', async (req, res) => {
   try {
-    const userId = parseInt(req.params.id, 10);
-    const { reason } = req.body;
-    if (!userId) {
-      return res.status(400).json({ error: 'Invalid user ID.' });
-    }
+    const { reason, username } = req.body || {};
+    let user = await findRequestUser(req.params.id, username);
 
-    let user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
     if (!user) {
-      try { await syncTurso(true); } catch (_) {}
-      user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
-    }
-    if (!user) {
-      return res.status(404).json({ error: 'User registration request not found.' });
+      return res.status(404).json({ error: 'User registration request not found or already processed.' });
     }
 
     const cleanReason = (reason && typeof reason === 'string')
@@ -104,13 +174,13 @@ router.post('/requests/:id/reject', async (req, res) => {
       UPDATE users
       SET status = 'rejected', rejection_reason = ?, approved_at = NULL, approved_by = ?
       WHERE id = ?
-    `).run(cleanReason, req.user.id, userId);
+    `).run(cleanReason, req.user.id, user.id);
 
     // Audit log
     db.prepare(`
       INSERT INTO audit_logs (action, actor_id, target_id, details)
       VALUES ('REGISTRATION_REJECTED', ?, ?, ?)
-    `).run(req.user.id, userId, sanitizeLogText(`Admin ${req.user.username} rejected account for ${user.username}. Reason: ${cleanReason}`));
+    `).run(req.user.id, user.id, sanitizeLogText(`Admin ${req.user.username} rejected account for ${user.username}. Reason: ${cleanReason}`));
 
     return res.json({
       success: true,
@@ -128,25 +198,18 @@ router.post('/requests/:id/reject', async (req, res) => {
  */
 router.delete('/requests/:id', async (req, res) => {
   try {
-    const userId = parseInt(req.params.id, 10);
-    if (!userId) {
-      return res.status(400).json({ error: 'Invalid user ID.' });
-    }
+    const username = req.body?.username || req.query?.username;
+    let user = await findRequestUser(req.params.id, username);
 
-    let user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
     if (!user) {
-      try { await syncTurso(true); } catch (_) {}
-      user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
-    }
-    if (!user) {
-      return res.status(404).json({ error: 'User registration request not found.' });
+      return res.status(404).json({ error: 'User registration request not found or already processed.' });
     }
 
     if (user.status === 'approved') {
       return res.status(400).json({ error: 'Cannot delete an active, approved user account via this endpoint.' });
     }
 
-    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    db.prepare('DELETE FROM users WHERE id = ?').run(user.id);
 
     db.prepare(`
       INSERT INTO audit_logs (action, actor_id, details)
@@ -202,22 +265,15 @@ router.get('/employees', async (req, res) => {
  */
 router.delete('/employees/:id', async (req, res) => {
   try {
-    const userId = parseInt(req.params.id, 10);
-    if (!userId) {
-      return res.status(400).json({ error: 'Invalid employee ID.' });
-    }
+    const username = req.body?.username || req.query?.username;
+    let employee = await findEmployeeUser(req.params.id, username);
 
-    if (userId === req.user.id) {
-      return res.status(400).json({ error: 'You cannot delete your own account.' });
-    }
-
-    let employee = db.prepare('SELECT id, name, username, role FROM users WHERE id = ?').get(userId);
-    if (!employee) {
-      try { await syncTurso(true); } catch (_) {}
-      employee = db.prepare('SELECT id, name, username, role FROM users WHERE id = ?').get(userId);
-    }
     if (!employee) {
       return res.status(404).json({ error: 'Employee not found.' });
+    }
+
+    if (employee.id === req.user.id) {
+      return res.status(400).json({ error: 'You cannot delete your own account.' });
     }
 
     if (employee.role === 'admin') {
@@ -225,11 +281,11 @@ router.delete('/employees/:id', async (req, res) => {
     }
 
     // Clean up associated updates for tasks assigned to this user, then user updates, tasks, sessions, and user record
-    db.prepare('DELETE FROM task_updates WHERE task_id IN (SELECT id FROM tasks WHERE assigned_to = ?)').run(userId);
-    db.prepare('DELETE FROM task_updates WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM tasks WHERE assigned_to = ?').run(userId);
-    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    db.prepare('DELETE FROM task_updates WHERE task_id IN (SELECT id FROM tasks WHERE assigned_to = ?)').run(employee.id);
+    db.prepare('DELETE FROM task_updates WHERE user_id = ?').run(employee.id);
+    db.prepare('DELETE FROM tasks WHERE assigned_to = ?').run(employee.id);
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(employee.id);
+    db.prepare('DELETE FROM users WHERE id = ?').run(employee.id);
 
     // Audit log
     db.prepare(`
@@ -253,18 +309,9 @@ router.delete('/employees/:id', async (req, res) => {
  */
 router.patch('/employees/:id', async (req, res) => {
   try {
-    const userId = parseInt(req.params.id, 10);
-    const { name, department } = req.body;
+    const { name, department, username } = req.body || {};
+    let employee = await findEmployeeUser(req.params.id, username);
 
-    if (!userId) {
-      return res.status(400).json({ error: 'Invalid employee ID.' });
-    }
-
-    let employee = db.prepare('SELECT id, name, username, role, department FROM users WHERE id = ?').get(userId);
-    if (!employee) {
-      try { await syncTurso(true); } catch (_) {}
-      employee = db.prepare('SELECT id, name, username, role, department FROM users WHERE id = ?').get(userId);
-    }
     if (!employee) {
       return res.status(404).json({ error: 'Employee not found.' });
     }
@@ -292,7 +339,7 @@ router.patch('/employees/:id', async (req, res) => {
       return res.status(400).json({ error: 'No fields provided for update.' });
     }
 
-    params.push(userId);
+    params.push(employee.id);
     db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...params);
 
     // Audit log
@@ -301,7 +348,7 @@ router.patch('/employees/:id', async (req, res) => {
       VALUES ('EMPLOYEE_UPDATED', ?, ?, ?)
     `).run(
       req.user.id,
-      userId,
+      employee.id,
       sanitizeLogText(`Admin ${req.user.username} updated employee @${employee.username}: ${updates.join(', ')}`)
     );
 

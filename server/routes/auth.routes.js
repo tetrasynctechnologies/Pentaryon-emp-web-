@@ -1,5 +1,5 @@
 const express = require('express');
-const { db, hashPassword, verifyPassword } = require('../db');
+const { db, hashPassword, verifyPassword, syncTurso } = require('../db');
 const { createSession, deleteSession, requireAuth } = require('../auth');
 const {
   loginRateLimiter,
@@ -16,7 +16,7 @@ const router = express.Router();
  * POST /api/auth/register
  * Employee Account Registration Request (Starts in 'pending' status)
  */
-router.post('/register', registerRateLimiter, (req, res) => {
+router.post('/register', registerRateLimiter, async (req, res) => {
   try {
     const { name, username, password, department, notes } = req.body;
 
@@ -48,7 +48,11 @@ router.post('/register', registerRateLimiter, (req, res) => {
     }
 
     // Check if username already exists
-    const existing = db.prepare('SELECT id, status FROM users WHERE username = ?').get(cleanUsername);
+    let existing = db.prepare('SELECT id, status FROM users WHERE username = ?').get(cleanUsername);
+    if (!existing) {
+      try { await syncTurso(true); } catch (_) {}
+      existing = db.prepare('SELECT id, status FROM users WHERE username = ?').get(cleanUsername);
+    }
     if (existing) {
       if (existing.status === 'pending') {
         return res.status(409).json({
@@ -92,7 +96,7 @@ router.post('/register', registerRateLimiter, (req, res) => {
  * POST /api/auth/login
  * Unified Login for Employees and Administrators
  */
-router.post('/login', loginRateLimiter, (req, res) => {
+router.post('/login', loginRateLimiter, async (req, res) => {
   try {
     const { username, password, expected_role } = req.body;
 
@@ -107,11 +111,20 @@ router.post('/login', loginRateLimiter, (req, res) => {
     }
 
     const cleanUsername = username.trim().toLowerCase();
-    const user = db.prepare(`
+    let user = db.prepare(`
       SELECT id, name, username, password_hash, salt, role, department, status, rejection_reason
       FROM users
       WHERE username = ?
     `).get(cleanUsername);
+
+    if (!user) {
+      try { await syncTurso(true); } catch (_) {}
+      user = db.prepare(`
+        SELECT id, name, username, password_hash, salt, role, department, status, rejection_reason
+        FROM users
+        WHERE username = ?
+      `).get(cleanUsername);
+    }
 
     // Constant-time mitigation against timing enumeration attacks
     if (!user) {

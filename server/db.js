@@ -289,8 +289,8 @@ async function pullFromTurso() {
       }
     }
 
-    // Sync users
-    const rUsers = await turso.execute('SELECT id, name, username, password_hash, salt, role, department, status, rejection_reason, notes, created_at, approved_at, approved_by, last_login_at FROM users');
+    // Sync users defensively
+    const rUsers = await turso.execute('SELECT * FROM users');
     if (rUsers.rows && rUsers.rows.length > 0) {
       const insUser = localDb.prepare(`
         INSERT OR REPLACE INTO users (id, name, username, password_hash, salt, role, department, status, rejection_reason, notes, created_at, approved_at, approved_by, last_login_at)
@@ -299,18 +299,18 @@ async function pullFromTurso() {
       for (const u of rUsers.rows) {
         insUser.run(
           Number(u.id),
-          String(u.name),
-          String(u.username),
-          String(u.password_hash),
-          String(u.salt),
-          String(u.role),
+          String(u.name || ''),
+          String(u.username || '').toLowerCase(),
+          String(u.password_hash || ''),
+          String(u.salt || ''),
+          String(u.role || 'employee'),
           String(u.department ?? 'General'),
-          String(u.status),
+          String(u.status || 'pending'),
           u.rejection_reason ? String(u.rejection_reason) : null,
           u.notes ? String(u.notes) : null,
-          String(u.created_at),
+          String(u.created_at || new Date().toISOString()),
           u.approved_at ? String(u.approved_at) : null,
-          u.approved_by ? Number(u.approved_by) : null,
+          u.approved_by !== null && u.approved_by !== undefined ? Number(u.approved_by) : null,
           u.last_login_at ? String(u.last_login_at) : null
         );
       }
@@ -337,6 +337,20 @@ async function syncTurso(force = false) {
   }
 }
 
+// Track pending Turso cloud mutations to ensure serverless functions don't freeze before writes complete
+let pendingTursoWrites = [];
+
+async function flushTurso() {
+  if (!turso || pendingTursoWrites.length === 0) return;
+  const currentWrites = pendingTursoWrites;
+  pendingTursoWrites = [];
+  try {
+    await Promise.allSettled(currentWrites);
+  } catch (err) {
+    console.warn('[Turso Flush Error]', err.message);
+  }
+}
+
 // Start remote init in background
 if (turso) {
   initTursoRemote().catch(() => {});
@@ -360,11 +374,12 @@ const db = {
     return {
       run(...args) {
         const result = localStmt.run(...args);
-        // If Turso is connected, push mutation to remote cloud primary asynchronously
+        // If Turso is connected, push mutation to remote cloud primary and track for flushing
         if (turso && isMutation) {
-          turso.execute({ sql, args }).catch(err => {
+          const writePromise = turso.execute({ sql, args }).catch(err => {
             console.warn('[Turso Remote Push Error]', err.message);
           });
+          pendingTursoWrites.push(writePromise);
         }
         return {
           changes: Number(result.changes),
@@ -397,5 +412,6 @@ module.exports = {
   db,
   hashPassword,
   verifyPassword,
-  syncTurso
+  syncTurso,
+  flushTurso
 };
