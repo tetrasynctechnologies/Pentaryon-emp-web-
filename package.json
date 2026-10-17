@@ -1,0 +1,33 @@
+{
+  "name": "tetrasync-employee-portal",
+  "version": "1.0.0",
+  "description": "Executive Employee Portal, Work Assignment & Account Clearance System",
+  "main": "server/index.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node tests/portal_test.js"
+  },
+  "keywords": [
+    "tetrasync",
+    "work-portal",
+    "employee-management",
+    "task-assignment",
+    "approval-system",
+    "express",
+    "sqlite"
+  ],
+  "author": "TetraSync Technologies",
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0"
+  }
+}
