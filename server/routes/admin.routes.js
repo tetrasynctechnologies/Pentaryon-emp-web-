@@ -12,8 +12,9 @@ router.use(requireAuth, requireAdmin);
  * GET /api/admin/requests
  * Fetch all pending employee registration requests
  */
-router.get('/requests', (req, res) => {
+router.get('/requests', async (req, res) => {
   try {
+    try { await syncTurso(); } catch (_) {}
     const requests = db.prepare(`
       SELECT id, name, username, department, status, notes, created_at
       FROM users
@@ -32,7 +33,7 @@ router.get('/requests', (req, res) => {
  * POST /api/admin/requests/:id/approve
  * Approve employee account request
  */
-router.post('/requests/:id/approve', (req, res) => {
+router.post('/requests/:id/approve', async (req, res) => {
   try {
     const userId = parseInt(req.params.id, 10);
     if (!userId) {
@@ -41,7 +42,7 @@ router.post('/requests/:id/approve', (req, res) => {
 
     let user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
     if (!user) {
-      try { syncTurso(true); } catch (_) {}
+      try { await syncTurso(true); } catch (_) {}
       user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
     }
     if (!user) {
@@ -78,7 +79,7 @@ router.post('/requests/:id/approve', (req, res) => {
  * POST /api/admin/requests/:id/reject
  * Reject employee account request
  */
-router.post('/requests/:id/reject', (req, res) => {
+router.post('/requests/:id/reject', async (req, res) => {
   try {
     const userId = parseInt(req.params.id, 10);
     const { reason } = req.body;
@@ -88,7 +89,7 @@ router.post('/requests/:id/reject', (req, res) => {
 
     let user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
     if (!user) {
-      try { syncTurso(true); } catch (_) {}
+      try { await syncTurso(true); } catch (_) {}
       user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
     }
     if (!user) {
@@ -125,7 +126,7 @@ router.post('/requests/:id/reject', (req, res) => {
  * DELETE /api/admin/requests/:id
  * Permanently purge a pending or rejected account request (Administrators)
  */
-router.delete('/requests/:id', (req, res) => {
+router.delete('/requests/:id', async (req, res) => {
   try {
     const userId = parseInt(req.params.id, 10);
     if (!userId) {
@@ -134,7 +135,7 @@ router.delete('/requests/:id', (req, res) => {
 
     let user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
     if (!user) {
-      try { syncTurso(true); } catch (_) {}
+      try { await syncTurso(true); } catch (_) {}
       user = db.prepare('SELECT id, name, username, status FROM users WHERE id = ?').get(userId);
     }
     if (!user) {
@@ -166,8 +167,9 @@ router.delete('/requests/:id', (req, res) => {
  * GET /api/admin/employees
  * List all active/approved employees with task statistics
  */
-router.get('/employees', (req, res) => {
+router.get('/employees', async (req, res) => {
   try {
+    try { await syncTurso(); } catch (_) {}
     const employees = db.prepare(`
       SELECT 
         u.id, 
@@ -198,7 +200,7 @@ router.get('/employees', (req, res) => {
  * DELETE /api/admin/employees/:id
  * Permanently remove an employee account and associated records (Administrators)
  */
-router.delete('/employees/:id', (req, res) => {
+router.delete('/employees/:id', async (req, res) => {
   try {
     const userId = parseInt(req.params.id, 10);
     if (!userId) {
@@ -211,7 +213,7 @@ router.delete('/employees/:id', (req, res) => {
 
     let employee = db.prepare('SELECT id, name, username, role FROM users WHERE id = ?').get(userId);
     if (!employee) {
-      try { syncTurso(true); } catch (_) {}
+      try { await syncTurso(true); } catch (_) {}
       employee = db.prepare('SELECT id, name, username, role FROM users WHERE id = ?').get(userId);
     }
     if (!employee) {
@@ -249,7 +251,7 @@ router.delete('/employees/:id', (req, res) => {
  * PATCH /api/admin/employees/:id
  * Update an employee's details such as Name or Department / Role (Administrators)
  */
-router.patch('/employees/:id', (req, res) => {
+router.patch('/employees/:id', async (req, res) => {
   try {
     const userId = parseInt(req.params.id, 10);
     const { name, department } = req.body;
@@ -260,7 +262,7 @@ router.patch('/employees/:id', (req, res) => {
 
     let employee = db.prepare('SELECT id, name, username, role, department FROM users WHERE id = ?').get(userId);
     if (!employee) {
-      try { syncTurso(true); } catch (_) {}
+      try { await syncTurso(true); } catch (_) {}
       employee = db.prepare('SELECT id, name, username, role, department FROM users WHERE id = ?').get(userId);
     }
     if (!employee) {

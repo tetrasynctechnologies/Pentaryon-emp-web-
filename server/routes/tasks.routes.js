@@ -11,8 +11,9 @@ router.use(requireAuth);
  * GET /api/tasks
  * Fetch tasks (for employee: their assigned tasks; for admin: all company tasks)
  */
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
+    try { await syncTurso(); } catch (_) {}
     const { status, priority, assigned_to, search } = req.query;
     const isEmployee = req.user.role !== 'admin';
 
@@ -71,7 +72,7 @@ router.get('/', (req, res) => {
  * POST /api/tasks
  * Create / Assign a new task (Administrators)
  */
-router.post('/', requireAdmin, (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
   try {
     const { title, description, priority, assigned_to, due_date, category } = req.body;
 
@@ -170,7 +171,7 @@ router.post('/', requireAdmin, (req, res) => {
  * GET /api/tasks/:id
  * Fetch task details with complete history timeline
  */
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const taskId = parseInt(req.params.id, 10);
     if (isNaN(taskId) || !taskId) {
@@ -191,7 +192,7 @@ router.get('/:id', (req, res) => {
 
     // If not found in local replica, attempt explicit sync from Turso primary
     if (!task) {
-      try { syncTurso(true); } catch (_) {}
+      try { await syncTurso(true); } catch (_) {}
       task = db.prepare(`
         SELECT 
           t.id, t.title, t.description, t.priority, t.status, t.progress_percent,
@@ -236,7 +237,7 @@ router.get('/:id', (req, res) => {
  * PATCH /api/tasks/:id/progress
  * Update work status, progress percentage, and add milestone notes
  */
-router.patch('/:id/progress', (req, res) => {
+router.patch('/:id/progress', async (req, res) => {
   try {
     const taskId = parseInt(req.params.id, 10);
     const { status, progress_percent, note, due_date } = req.body;
@@ -247,7 +248,7 @@ router.patch('/:id/progress', (req, res) => {
 
     let task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
     if (!task) {
-      try { syncTurso(true); } catch (_) {}
+      try { await syncTurso(true); } catch (_) {}
       task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
     }
 
@@ -326,8 +327,6 @@ router.patch('/:id/progress', (req, res) => {
       sanitizeLogText(`User ${req.user.username} updated task #${taskId}: status=${newStatus}, progress=${newProgress}%${dueChanged ? `, due_date=${newDueDate}` : ''}`)
     );
 
-    try { syncTurso(true); } catch (_) {}
-
     return res.json({
       success: true,
       message: 'Work progress updated successfully!',
@@ -348,7 +347,7 @@ router.patch('/:id/progress', (req, res) => {
  * DELETE /api/tasks/:id
  * Delete task (Admin only)
  */
-router.delete('/:id', requireAdmin, (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     const taskId = parseInt(req.params.id, 10);
     if (isNaN(taskId) || !taskId) {
@@ -357,7 +356,7 @@ router.delete('/:id', requireAdmin, (req, res) => {
 
     let task = db.prepare('SELECT id, title FROM tasks WHERE id = ?').get(taskId);
     if (!task) {
-      try { syncTurso(true); } catch (_) {}
+      try { await syncTurso(true); } catch (_) {}
       task = db.prepare('SELECT id, title FROM tasks WHERE id = ?').get(taskId);
     }
 
@@ -371,8 +370,6 @@ router.delete('/:id', requireAdmin, (req, res) => {
       INSERT INTO audit_logs (action, actor_id, target_id, details)
       VALUES ('TASK_DELETED', ?, ?, ?)
     `).run(req.user.id, taskId, sanitizeLogText(`Admin ${req.user.username} deleted task #${taskId} ("${task.title}")`));
-
-    try { syncTurso(true); } catch (_) {}
 
     return res.json({ success: true, message: 'Task deleted successfully.' });
   } catch (err) {

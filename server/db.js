@@ -1,128 +1,40 @@
+const { DatabaseSync } = require('node:sqlite');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const config = require('./config');
+const { createClient } = require('@libsql/client/web');
 
 // Ensure database directory exists
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 
-let DatabaseEngine;
+// Initialize local SQLite database
+const localDb = new DatabaseSync(config.dbPath);
+
+// Enable WAL mode & foreign keys
 try {
-  DatabaseEngine = require('libsql');
-} catch (_) {
-  DatabaseEngine = require('node:sqlite').DatabaseSync;
-}
-
-let rawDb = null;
-let isTursoActive = false;
-
-if (config.tursoUrl && config.tursoAuthToken && typeof DatabaseEngine === 'function') {
-  try {
-    rawDb = new DatabaseEngine(config.dbPath, {
-      syncUrl: config.tursoUrl,
-      authToken: config.tursoAuthToken,
-      readYourWrites: true
-    });
-    try {
-      rawDb.sync();
-    } catch (syncErr) {
-      console.warn('[Turso Initial Sync Warning]', syncErr.message);
-    }
-    isTursoActive = true;
-    console.log('[Turso] Initialized native embedded replica with primary:', config.tursoUrl);
-  } catch (openErr) {
-    console.warn('[Turso Open Warning]', openErr.message, '- recreating local replica file...');
-    try {
-      if (fs.existsSync(config.dbPath)) fs.unlinkSync(config.dbPath);
-      if (fs.existsSync(config.dbPath + '-wal')) fs.unlinkSync(config.dbPath + '-wal');
-      if (fs.existsSync(config.dbPath + '-shm')) fs.unlinkSync(config.dbPath + '-shm');
-    } catch (_) {}
-
-    try {
-      rawDb = new DatabaseEngine(config.dbPath, {
-        syncUrl: config.tursoUrl,
-        authToken: config.tursoAuthToken,
-        readYourWrites: true
-      });
-      try {
-        rawDb.sync();
-      } catch (syncErr) {
-        console.warn('[Turso Sync Warning after recreation]', syncErr.message);
-      }
-      isTursoActive = true;
-      console.log('[Turso] Successfully recreated and connected embedded replica:', config.tursoUrl);
-    } catch (fallbackErr) {
-      console.error('[Turso Fallback to local SQLite]', fallbackErr.message);
-      rawDb = new DatabaseEngine(config.dbPath);
-    }
-  }
-} else {
-  rawDb = new DatabaseEngine(config.dbPath);
-}
-
-// Wrapper for clean API & metadata stripping
-const db = {
-  rawDb,
-  exec(sql) {
-    return rawDb.exec(sql);
-  },
-  sync() {
-    if (isTursoActive && typeof rawDb.sync === 'function') {
-      try {
-        return rawDb.sync();
-      } catch (err) {
-        console.warn('[Turso Sync Warning]', err.message);
-      }
-    }
-  },
-  prepare(sql) {
-    const stmt = rawDb.prepare(sql);
-    return {
-      run(...args) {
-        return stmt.run(...args);
-      },
-      get(...args) {
-        const row = stmt.get(...args);
-        if (row && typeof row === 'object' && '_metadata' in row) {
-          delete row._metadata;
-        }
-        return row;
-      },
-      all(...args) {
-        const rows = stmt.all(...args);
-        if (Array.isArray(rows)) {
-          for (let i = 0; i < rows.length; i++) {
-            if (rows[i] && typeof rows[i] === 'object' && '_metadata' in rows[i]) {
-              delete rows[i]._metadata;
-            }
-          }
-        }
-        return rows;
-      }
-    };
-  }
-};
-
-// Enable foreign keys & WAL mode
-try {
-  db.exec('PRAGMA foreign_keys = ON;');
+  localDb.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA foreign_keys = ON;
+  `);
 } catch (_) {}
 
-let lastSyncTime = 0;
-function syncTurso(force = false) {
-  if (!isTursoActive || !rawDb || typeof rawDb.sync !== 'function') return;
-  const now = Date.now();
-  if (!force && now - lastSyncTime < 2000) return; // Debounce 2s
-  lastSyncTime = now;
+// Optional Turso client using pure HTTP web client (zero native binaries, zero lambda crashes)
+let turso = null;
+if (config.tursoUrl && config.tursoAuthToken) {
   try {
-    rawDb.sync();
+    turso = createClient({
+      url: config.tursoUrl,
+      authToken: config.tursoAuthToken
+    });
+    console.log('[Turso Web] Connected to cloud primary over HTTPS:', config.tursoUrl);
   } catch (err) {
-    console.warn('[Turso Sync Error]', err.message);
+    console.error('[Turso Web Init Error]', err);
   }
 }
 
 // Create Schema
-db.exec(`
+localDb.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -223,7 +135,7 @@ function verifyPassword(password, hash, salt) {
 
 // Seed Initial Admin and Foundational Employee Accounts with deterministic IDs
 function seedAccounts() {
-  const insertUserStmt = db.prepare(`
+  const insertUserStmt = localDb.prepare(`
     INSERT OR REPLACE INTO users (id, name, username, password_hash, salt, role, department, status, approved_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', CURRENT_TIMESTAMP)
   `);
@@ -244,9 +156,242 @@ function seedAccounts() {
 }
 
 seedAccounts();
-if (isTursoActive) {
-  syncTurso(true);
+
+// Async Turso synchronization engine
+async function initTursoRemote() {
+  if (!turso) return;
+  try {
+    await turso.executeMultiple(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        salt TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'employee',
+        department TEXT DEFAULT 'General',
+        status TEXT NOT NULL DEFAULT 'pending',
+        rejection_reason TEXT NULL,
+        notes TEXT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        approved_at DATETIME NULL,
+        approved_by INTEGER NULL,
+        last_login_at DATETIME NULL
+      );
+      CREATE TABLE IF NOT EXISTS tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        priority TEXT NOT NULL DEFAULT 'medium',
+        status TEXT NOT NULL DEFAULT 'pending',
+        progress_percent INTEGER DEFAULT 0,
+        assigned_to INTEGER NOT NULL,
+        assigned_by INTEGER NOT NULL,
+        due_date TEXT NULL,
+        category TEXT DEFAULT 'General',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS task_updates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        old_status TEXT NULL,
+        new_status TEXT NULL,
+        progress_percent INTEGER NULL,
+        note TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action TEXT NOT NULL,
+        actor_id INTEGER NULL,
+        target_id INTEGER NULL,
+        details TEXT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Ensure seed accounts exist in remote Turso
+    for (let idx = 0; idx < config.admins.length; idx++) {
+      const admin = config.admins[idx];
+      const fixedId = idx + 1;
+      const { hash, salt } = hashPassword(config.adminDefaultPassword);
+      await turso.execute({
+        sql: `INSERT OR IGNORE INTO users (id, name, username, password_hash, salt, role, department, status, approved_at) VALUES (?, ?, ?, ?, ?, 'admin', ?, 'approved', CURRENT_TIMESTAMP)`,
+        args: [fixedId, admin.name, admin.username.toLowerCase(), hash, salt, admin.department]
+      });
+    }
+    for (let idx = 0; idx < config.employees.length; idx++) {
+      const emp = config.employees[idx];
+      const fixedId = idx + 5;
+      const { hash, salt } = hashPassword(config.employeeDefaultPassword);
+      await turso.execute({
+        sql: `INSERT OR IGNORE INTO users (id, name, username, password_hash, salt, role, department, status, approved_at) VALUES (?, ?, ?, ?, ?, 'employee', ?, 'approved', CURRENT_TIMESTAMP)`,
+        args: [fixedId, emp.name, emp.username.toLowerCase(), hash, salt, emp.department]
+      });
+    }
+
+    // Initial pull
+    await pullFromTurso();
+  } catch (err) {
+    console.warn('[Turso Init Warning]', err.message);
+  }
 }
+
+// Pull latest data from Turso into local SQLite replica
+async function pullFromTurso() {
+  if (!turso) return;
+  try {
+    // Sync tasks
+    const rTasks = await turso.execute('SELECT * FROM tasks');
+    if (rTasks.rows && rTasks.rows.length > 0) {
+      const insTask = localDb.prepare(`
+        INSERT OR REPLACE INTO tasks (id, title, description, priority, status, progress_percent, assigned_to, assigned_by, due_date, category, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const t of rTasks.rows) {
+        insTask.run(
+          Number(t.id),
+          String(t.title),
+          String(t.description),
+          String(t.priority),
+          String(t.status),
+          Number(t.progress_percent ?? 0),
+          Number(t.assigned_to),
+          Number(t.assigned_by),
+          t.due_date ? String(t.due_date) : null,
+          t.category ? String(t.category) : 'General',
+          String(t.created_at),
+          String(t.updated_at)
+        );
+      }
+    }
+
+    // Sync task_updates
+    const rUpdates = await turso.execute('SELECT * FROM task_updates');
+    if (rUpdates.rows && rUpdates.rows.length > 0) {
+      const insUp = localDb.prepare(`
+        INSERT OR REPLACE INTO task_updates (id, task_id, user_id, old_status, new_status, progress_percent, note, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const u of rUpdates.rows) {
+        insUp.run(
+          Number(u.id),
+          Number(u.task_id),
+          Number(u.user_id),
+          u.old_status ? String(u.old_status) : null,
+          u.new_status ? String(u.new_status) : null,
+          u.progress_percent !== null && u.progress_percent !== undefined ? Number(u.progress_percent) : null,
+          String(u.note),
+          String(u.created_at)
+        );
+      }
+    }
+
+    // Sync users
+    const rUsers = await turso.execute('SELECT id, name, username, password_hash, salt, role, department, status, rejection_reason, notes, created_at, approved_at, approved_by, last_login_at FROM users');
+    if (rUsers.rows && rUsers.rows.length > 0) {
+      const insUser = localDb.prepare(`
+        INSERT OR REPLACE INTO users (id, name, username, password_hash, salt, role, department, status, rejection_reason, notes, created_at, approved_at, approved_by, last_login_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const u of rUsers.rows) {
+        insUser.run(
+          Number(u.id),
+          String(u.name),
+          String(u.username),
+          String(u.password_hash),
+          String(u.salt),
+          String(u.role),
+          String(u.department ?? 'General'),
+          String(u.status),
+          u.rejection_reason ? String(u.rejection_reason) : null,
+          u.notes ? String(u.notes) : null,
+          String(u.created_at),
+          u.approved_at ? String(u.approved_at) : null,
+          u.approved_by ? Number(u.approved_by) : null,
+          u.last_login_at ? String(u.last_login_at) : null
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('[Turso Pull Warning]', err.message);
+  }
+}
+
+let lastSyncTime = 0;
+let isSyncing = false;
+async function syncTurso(force = false) {
+  if (!turso || isSyncing) return;
+  const now = Date.now();
+  if (!force && now - lastSyncTime < 3000) return; // Debounce 3s
+  lastSyncTime = now;
+  isSyncing = true;
+  try {
+    await pullFromTurso();
+  } catch (err) {
+    console.warn('[Turso Sync Error]', err.message);
+  } finally {
+    isSyncing = false;
+  }
+}
+
+// Start remote init in background
+if (turso) {
+  initTursoRemote().catch(() => {});
+}
+
+function isMutationQuery(sql) {
+  const trimmed = sql.trim().toUpperCase();
+  return trimmed.startsWith('INSERT') || trimmed.startsWith('UPDATE') || trimmed.startsWith('DELETE') || trimmed.startsWith('REPLACE');
+}
+
+// Wrapper for clean API & seamless Turso HTTP dual-write
+const db = {
+  rawDb: localDb,
+  exec(sql) {
+    return localDb.exec(sql);
+  },
+  prepare(sql) {
+    const localStmt = localDb.prepare(sql);
+    const isMutation = isMutationQuery(sql);
+
+    return {
+      run(...args) {
+        const result = localStmt.run(...args);
+        // If Turso is connected, push mutation to remote cloud primary asynchronously
+        if (turso && isMutation) {
+          turso.execute({ sql, args }).catch(err => {
+            console.warn('[Turso Remote Push Error]', err.message);
+          });
+        }
+        return {
+          changes: Number(result.changes),
+          lastInsertRowid: Number(result.lastInsertRowid)
+        };
+      },
+      get(...args) {
+        const row = localStmt.get(...args);
+        if (row && typeof row === 'object' && '_metadata' in row) {
+          delete row._metadata;
+        }
+        return row;
+      },
+      all(...args) {
+        const rows = localStmt.all(...args);
+        if (Array.isArray(rows)) {
+          for (let i = 0; i < rows.length; i++) {
+            if (rows[i] && typeof rows[i] === 'object' && '_metadata' in rows[i]) {
+              delete rows[i]._metadata;
+            }
+          }
+        }
+        return rows;
+      }
+    };
+  }
+};
 
 module.exports = {
   db,
