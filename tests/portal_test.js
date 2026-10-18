@@ -223,6 +223,14 @@ async function runTests() {
     );
     assert(completeRes.status === 200 && completeRes.data.task.status === 'completed', 'Employee successfully marks task complete at 100%');
 
+    // Test 14: Administrator Permanently Deletes Task
+    const delTaskRes = await request('DELETE', `/api/tasks/${taskId}`, null, { Cookie: adminCookie });
+    assert(delTaskRes.status === 200 && delTaskRes.data.success, 'Administrator permanently deletes task');
+
+    const checkDeletedRes = await request('GET', `/api/tasks`, null, { Cookie: adminCookie });
+    const taskStillExists = checkDeletedRes.data.tasks?.some(t => t.id === taskId);
+    assert(!taskStillExists, 'Deleted task is completely removed and does not persist on reload');
+
     // Test 14: Registration Rejection Flow
     const spamUsername = `spam_user_${Date.now()}`;
     await request('POST', '/api/auth/register', {

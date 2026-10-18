@@ -622,9 +622,13 @@ const act = {
   del: async (d) => {
     if (!confirm('Are you sure you want to permanently delete this task?')) return;
     try {
+      // Optimistically remove from local state for instant UI responsiveness
+      S.T = S.T.filter((t) => String(t.id) !== String(d.id));
+      render();
       await api(`/api/tasks/${d.id}`, { method: 'DELETE' });
       await loadDataAndRender();
     } catch (err) {
+      await loadDataAndRender();
       alert(err.message);
     }
   },

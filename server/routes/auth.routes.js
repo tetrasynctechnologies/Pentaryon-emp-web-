@@ -1,5 +1,5 @@
 const express = require('express');
-const { db, hashPassword, verifyPassword, syncTurso } = require('../db');
+const { db, hashPassword, verifyPassword, syncTurso, flushTurso } = require('../db');
 const { createSession, deleteSession, requireAuth } = require('../auth');
 const {
   loginRateLimiter,
@@ -88,6 +88,8 @@ router.post('/register', registerRateLimiter, async (req, res) => {
       INSERT INTO audit_logs (action, target_id, details)
       VALUES ('REGISTRATION_REQUEST_SUBMITTED', ?, ?)
     `).run(newUserId, sanitizeLogText(`User ${cleanUsername} (${name.trim()}) requested employee account for role: ${cleanDept}`));
+
+    try { await flushTurso(); } catch (_) {}
 
     return res.status(201).json({
       success: true,

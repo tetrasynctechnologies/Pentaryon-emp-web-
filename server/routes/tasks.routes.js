@@ -1,5 +1,5 @@
 const express = require('express');
-const { db, syncTurso } = require('../db');
+const { db, turso, syncTurso, flushTurso } = require('../db');
 const { requireAuth, requireAdmin } = require('../auth');
 const { sanitizeLogText } = require('../security');
 const { sendTaskAssignedEmail } = require('../email.service');
@@ -116,12 +116,28 @@ router.post('/', requireAdmin, async (req, res) => {
       : (assignee.department || 'General');
     const cleanDueDate = (due_date && typeof due_date === 'string') ? due_date.trim().slice(0, 20) : null;
 
+    // Guarantee ID consistency between local replica and Turso cloud primary
+    let nextTaskId = null;
+    if (turso) {
+      try {
+        const maxRes = await turso.execute('SELECT MAX(id) AS max_id FROM tasks');
+        const maxRemote = maxRes.rows[0]?.max_id ? Number(maxRes.rows[0].max_id) : 0;
+        const maxLocal = db.prepare('SELECT MAX(id) AS max_id FROM tasks').get()?.max_id || 0;
+        nextTaskId = Math.max(maxRemote, maxLocal) + 1;
+      } catch (_) {}
+    }
+    if (!nextTaskId) {
+      const maxLocal = db.prepare('SELECT MAX(id) AS max_id FROM tasks').get()?.max_id || 0;
+      nextTaskId = maxLocal + 1;
+    }
+
     const insertStmt = db.prepare(`
-      INSERT INTO tasks (title, description, priority, status, progress_percent, assigned_to, assigned_by, due_date, category)
-      VALUES (?, ?, ?, 'pending', 0, ?, ?, ?, ?)
+      INSERT INTO tasks (id, title, description, priority, status, progress_percent, assigned_to, assigned_by, due_date, category)
+      VALUES (?, ?, ?, ?, 'pending', 0, ?, ?, ?, ?)
     `);
 
-    const result = insertStmt.run(
+    insertStmt.run(
+      nextTaskId,
       title.trim(),
       description.trim(),
       cleanPriority,
@@ -131,7 +147,7 @@ router.post('/', requireAdmin, async (req, res) => {
       cleanCategory
     );
 
-    const taskId = Number(result.lastInsertRowid);
+    const taskId = nextTaskId;
 
     // Initial update log
     db.prepare(`
@@ -180,7 +196,8 @@ router.post('/', requireAdmin, async (req, res) => {
       console.warn('[Task Email Dispatch Warning]', mailErr.message);
     }
 
-    try { syncTurso(true); } catch (_) {}
+    // Flush writes to Turso before returning in serverless
+    try { await flushTurso(); } catch (_) {}
 
     return res.status(201).json({
       success: true,
@@ -353,6 +370,9 @@ router.patch('/:id/progress', async (req, res) => {
       sanitizeLogText(`User ${req.user.username} updated task #${taskId}: status=${newStatus}, progress=${newProgress}%${dueChanged ? `, due_date=${newDueDate}` : ''}`)
     );
 
+    // Flush pending Turso writes before serverless response freeze
+    try { await flushTurso(); } catch (_) {}
+
     return res.json({
       success: true,
       message: 'Work progress updated successfully!',
@@ -386,18 +406,34 @@ router.delete('/:id', requireAdmin, async (req, res) => {
       task = db.prepare('SELECT id, title FROM tasks WHERE id = ?').get(taskId);
     }
 
-    if (!task) {
-      return res.status(404).json({ error: 'Task not found.' });
+    // Direct deletion on Turso cloud to ensure atomic deletion across distributed replicas
+    if (turso) {
+      try {
+        await turso.execute({ sql: 'DELETE FROM task_updates WHERE task_id = ?', args: [taskId] });
+        await turso.execute({ sql: 'DELETE FROM tasks WHERE id = ?', args: [taskId] });
+      } catch (tErr) {
+        console.warn('[Turso Direct Delete Error]', tErr.message);
+      }
     }
 
+    // Explicitly delete task updates first locally to maintain foreign key integrity
+    db.prepare('DELETE FROM task_updates WHERE task_id = ?').run(taskId);
     db.prepare('DELETE FROM tasks WHERE id = ?').run(taskId);
 
-    db.prepare(`
-      INSERT INTO audit_logs (action, actor_id, target_id, details)
-      VALUES ('TASK_DELETED', ?, ?, ?)
-    `).run(req.user.id, taskId, sanitizeLogText(`Admin ${req.user.username} deleted task #${taskId} ("${task.title}")`));
+    if (task) {
+      db.prepare(`
+        INSERT INTO audit_logs (action, actor_id, target_id, details)
+        VALUES ('TASK_DELETED', ?, ?, ?)
+      `).run(req.user.id, taskId, sanitizeLogText(`Admin ${req.user.username} deleted task #${taskId} ("${task.title}")`));
+    }
 
-    return res.json({ success: true, message: 'Task deleted successfully.' });
+    // Flush pending Turso writes before serverless response freeze
+    try { await flushTurso(); } catch (_) {}
+
+    return res.json({
+      success: true,
+      message: `Task #${taskId} deleted successfully.`
+    });
   } catch (err) {
     console.error('Delete task error:', err);
     return res.status(500).json({ error: 'Failed to delete task.' });

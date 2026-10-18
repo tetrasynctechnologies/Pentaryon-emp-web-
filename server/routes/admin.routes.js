@@ -1,5 +1,5 @@
 const express = require('express');
-const { db, syncTurso } = require('../db');
+const { db, turso, syncTurso, flushTurso } = require('../db');
 const { requireAuth, requireAdmin } = require('../auth');
 const { sanitizeLogText } = require('../security');
 
@@ -143,6 +143,8 @@ router.post('/requests/:id/approve', async (req, res) => {
       VALUES ('REGISTRATION_APPROVED', ?, ?, ?)
     `).run(req.user.id, user.id, sanitizeLogText(`Admin ${req.user.username} approved account for ${user.username} (${user.name})`));
 
+    try { await flushTurso(); } catch (_) {}
+
     return res.json({
       success: true,
       message: `Account for ${user.name} (@${user.username}) has been approved. The employee can now sign in.`
@@ -182,6 +184,8 @@ router.post('/requests/:id/reject', async (req, res) => {
       VALUES ('REGISTRATION_REJECTED', ?, ?, ?)
     `).run(req.user.id, user.id, sanitizeLogText(`Admin ${req.user.username} rejected account for ${user.username}. Reason: ${cleanReason}`));
 
+    try { await flushTurso(); } catch (_) {}
+
     return res.json({
       success: true,
       message: `Registration request for ${user.name} (@${user.username}) has been rejected.`
@@ -209,12 +213,20 @@ router.delete('/requests/:id', async (req, res) => {
       return res.status(400).json({ error: 'Cannot delete an active, approved user account via this endpoint.' });
     }
 
+    if (turso) {
+      try {
+        await turso.execute({ sql: 'DELETE FROM users WHERE id = ?', args: [user.id] });
+      } catch (_) {}
+    }
+
     db.prepare('DELETE FROM users WHERE id = ?').run(user.id);
 
     db.prepare(`
       INSERT INTO audit_logs (action, actor_id, details)
       VALUES ('REGISTRATION_PURGED', ?, ?)
     `).run(req.user.id, sanitizeLogText(`Admin ${req.user.username} purged request for ${user.username} (${user.name})`));
+
+    try { await flushTurso(); } catch (_) {}
 
     return res.json({
       success: true,
@@ -281,6 +293,16 @@ router.delete('/employees/:id', async (req, res) => {
       return res.status(403).json({ error: 'Administrator accounts cannot be deleted via this endpoint.' });
     }
 
+    if (turso) {
+      try {
+        await turso.execute({ sql: 'DELETE FROM task_updates WHERE task_id IN (SELECT id FROM tasks WHERE assigned_to = ?)', args: [employee.id] });
+        await turso.execute({ sql: 'DELETE FROM task_updates WHERE user_id = ?', args: [employee.id] });
+        await turso.execute({ sql: 'DELETE FROM tasks WHERE assigned_to = ?', args: [employee.id] });
+        await turso.execute({ sql: 'DELETE FROM sessions WHERE user_id = ?', args: [employee.id] });
+        await turso.execute({ sql: 'DELETE FROM users WHERE id = ?', args: [employee.id] });
+      } catch (_) {}
+    }
+
     // Clean up associated updates for tasks assigned to this user, then user updates, tasks, sessions, and user record
     db.prepare('DELETE FROM task_updates WHERE task_id IN (SELECT id FROM tasks WHERE assigned_to = ?)').run(employee.id);
     db.prepare('DELETE FROM task_updates WHERE user_id = ?').run(employee.id);
@@ -293,6 +315,8 @@ router.delete('/employees/:id', async (req, res) => {
       INSERT INTO audit_logs (action, actor_id, details)
       VALUES ('EMPLOYEE_DELETED', ?, ?)
     `).run(req.user.id, sanitizeLogText(`Admin ${req.user.username} deleted employee account ${employee.username} (${employee.name})`));
+
+    try { await flushTurso(); } catch (_) {}
 
     return res.json({
       success: true,
@@ -364,6 +388,8 @@ router.patch('/employees/:id', async (req, res) => {
 
     const updated = db.prepare('SELECT id, name, username, role, department, email FROM users WHERE id = ?').get(employee.id);
 
+    try { await flushTurso(); } catch (_) {}
+
     return res.json({
       success: true,
       message: `Employee @${employee.username} updated successfully.`,
@@ -379,7 +405,7 @@ router.patch('/employees/:id', async (req, res) => {
  * POST /api/admin/employees
  * Directly provision a new approved employee account (Administrators)
  */
-router.post('/employees', (req, res) => {
+router.post('/employees', async (req, res) => {
   try {
     const { name, username, email, password, department } = req.body;
     if (!name || typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100) {
@@ -424,6 +450,8 @@ router.post('/employees', (req, res) => {
       INSERT INTO audit_logs (action, actor_id, target_id, details)
       VALUES ('EMPLOYEE_CREATED', ?, ?, ?)
     `).run(req.user.id, newId, sanitizeLogText(`Admin ${req.user.username} created employee ${cleanUsername} (${cleanName})`));
+
+    try { await flushTurso(); } catch (_) {}
 
     return res.status(201).json({
       success: true,

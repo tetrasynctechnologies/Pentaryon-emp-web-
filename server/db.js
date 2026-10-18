@@ -291,6 +291,13 @@ async function pullFromTurso() {
           String(t.updated_at)
         );
       }
+      // Prune local tasks and updates that were deleted on Turso primary
+      const tursoTaskIds = rTasks.rows.map(t => Number(t.id));
+      const placeholders = tursoTaskIds.map(() => '?').join(',');
+      localDb.prepare(`DELETE FROM tasks WHERE id NOT IN (${placeholders})`).run(...tursoTaskIds);
+      localDb.prepare(`DELETE FROM task_updates WHERE task_id NOT IN (${placeholders})`).run(...tursoTaskIds);
+    } else {
+      localDb.exec('DELETE FROM tasks; DELETE FROM task_updates;');
     }
 
     // Sync task_updates
@@ -312,6 +319,11 @@ async function pullFromTurso() {
           String(u.created_at)
         );
       }
+      const tursoUpIds = rUpdates.rows.map(u => Number(u.id));
+      const upPlaceholders = tursoUpIds.map(() => '?').join(',');
+      localDb.prepare(`DELETE FROM task_updates WHERE id NOT IN (${upPlaceholders})`).run(...tursoUpIds);
+    } else {
+      localDb.exec('DELETE FROM task_updates;');
     }
 
     // Sync users defensively
@@ -367,13 +379,15 @@ async function syncTurso(force = false) {
 let pendingTursoWrites = [];
 
 async function flushTurso() {
-  if (!turso || pendingTursoWrites.length === 0) return;
-  const currentWrites = pendingTursoWrites;
-  pendingTursoWrites = [];
-  try {
-    await Promise.allSettled(currentWrites);
-  } catch (err) {
-    console.warn('[Turso Flush Error]', err.message);
+  if (!turso) return;
+  while (pendingTursoWrites.length > 0) {
+    const currentWrites = pendingTursoWrites;
+    pendingTursoWrites = [];
+    try {
+      await Promise.allSettled(currentWrites);
+    } catch (err) {
+      console.warn('[Turso Flush Error]', err.message);
+    }
   }
 }
 
@@ -436,6 +450,7 @@ const db = {
 
 module.exports = {
   db,
+  turso,
   hashPassword,
   verifyPassword,
   syncTurso,
