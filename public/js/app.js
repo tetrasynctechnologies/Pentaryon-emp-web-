@@ -205,10 +205,9 @@ function gate(m) {
         <input id="u" name="u" class="mono" autocomplete="username" autocapitalize="none" required autofocus>
         <label for="pw">Password</label>
         <div style="position:relative">
-          <input id="pw" name="p" type="password" autocomplete="current-password" required placeholder="${S.role === 'emp' ? 'username@TetraSync!' : '••••••••'}">
+          <input id="pw" name="p" type="password" autocomplete="current-password" required placeholder="••••••••">
           <button type="button" class="eye" data-a="pw" aria-label="Show password">${ic('eye')}</button>
         </div>
-        ${S.role === 'emp' ? '<div class="mu" style="font-size:11px;margin-top:4px">Employee access password: <span class="mono cy">username@TetraSync!</span></div>' : ''}
         ${m ? `<div class="alert ${m.c}" role="alert">${m.t}</div>` : ''}
         <button class="p" style="width:100%;margin-top:16px;min-height:44px">Authenticate</button>
         <p style="text-align:center;margin:14px 0 0">
