@@ -121,8 +121,8 @@ async function runTests() {
       assert(aRes.status === 200 && aRes.data.user.role === 'admin', `Administrator "${adminUser}" authenticates successfully`);
     }
 
-    // Test 4: Foundational Employees Authentication (Prashetha, Chethana, Surya, Harish)
-    for (const emp of ['prashetha', 'chethana', 'surya', 'harish']) {
+    // Test 4: Foundational Employees Authentication (Prashetha, Chethana, Surya, Bhuvanika, Harish)
+    for (const emp of ['prashetha', 'chethana', 'surya', 'bhuvanika', 'harish']) {
       const eRes = await request('POST', '/api/auth/login', {
         username: emp,
         password: config.getEmployeeDefaultPassword(emp)
@@ -632,6 +632,27 @@ async function runTests() {
       'Session Token Format Validation: Non-hex session tokens rejected safely with HTTP 401'
     );
 
+    // Test 54: Employee Email Integration & Management
+    const empListRes = await request('GET', '/api/admin/employees', null, { Cookie: adminCookie });
+    const bhuvanikaFound = empListRes.data.employees?.find((e) => e.username === 'bhuvanika');
+    assert(
+      bhuvanikaFound && bhuvanikaFound.email === 'chennurubhuvanika@gmail.com' && bhuvanikaFound.department === 'Video Editor',
+      'Employee Directory: Pre-configured team member Bhuvanika Ch correctly exposes email and Video Editor department'
+    );
+
+    // Test 55: Update Employee Email via Admin PATCH
+    const emailPatchRes = await request(
+      'PATCH',
+      `/api/admin/employees/${bhuvanikaFound.id}`,
+      {
+        name: 'Bhuvanika Ch',
+        department: 'Video Editor',
+        email: 'chennurubhuvanika@gmail.com'
+      },
+      { Cookie: adminCookie }
+    );
+    assert(emailPatchRes.status === 200 && emailPatchRes.data.employee.email === 'chennurubhuvanika@gmail.com', 'Admin successfully updates and persists employee email');
+
     console.log(`\nResults: ${passed} / ${total} tests passed successfully.\n`);
   } catch (err) {
     console.error('Test execution failed with error:', err);
@@ -644,7 +665,7 @@ async function runTests() {
         DELETE FROM task_updates;
         DELETE FROM audit_logs;
         DELETE FROM sessions;
-        DELETE FROM users WHERE username NOT IN ('joshua', 'kishore', 'jason', 'akshay', 'prashetha', 'chethana', 'surya', 'harish');
+        DELETE FROM users WHERE username NOT IN ('joshua', 'kishore', 'jason', 'akshay', 'prashetha', 'chethana', 'surya', 'bhuvanika', 'harish');
         UPDATE users SET department = 'Cyber Security' WHERE username = 'surya';
         DELETE FROM sqlite_sequence WHERE name IN ('tasks', 'task_updates', 'audit_logs');
         PRAGMA foreign_keys = ON;

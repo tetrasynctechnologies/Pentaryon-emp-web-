@@ -18,7 +18,7 @@ const router = express.Router();
  */
 router.post('/register', registerRateLimiter, async (req, res) => {
   try {
-    const { name, username, password, department, notes } = req.body;
+    const { name, username, email, password, department, notes } = req.body;
 
     if (!name || typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100) {
       return res.status(400).json({ error: 'Please enter your full name (between 2 and 100 characters).' });
@@ -33,6 +33,14 @@ router.post('/register', registerRateLimiter, async (req, res) => {
       return res.status(400).json({
         error: 'Username must be between 3 and 30 characters and contain only letters, numbers, dots, hyphens, or underscores.'
       });
+    }
+
+    let cleanEmail = null;
+    if (email && typeof email === 'string' && email.trim()) {
+      cleanEmail = email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        return res.status(400).json({ error: 'Please enter a valid email address.' });
+      }
     }
 
     if (!password || typeof password !== 'string' || password.length < 8 || password.length > 128) {
@@ -68,11 +76,11 @@ router.post('/register', registerRateLimiter, async (req, res) => {
     const { hash, salt } = hashPassword(password);
 
     const insertStmt = db.prepare(`
-      INSERT INTO users (name, username, password_hash, salt, role, department, status, notes)
-      VALUES (?, ?, ?, ?, 'employee', ?, 'pending', ?)
+      INSERT INTO users (name, username, email, password_hash, salt, role, department, status, notes)
+      VALUES (?, ?, ?, ?, ?, 'employee', ?, 'pending', ?)
     `);
 
-    const result = insertStmt.run(name.trim(), cleanUsername, hash, salt, cleanDept, cleanNotes);
+    const result = insertStmt.run(name.trim(), cleanUsername, cleanEmail, hash, salt, cleanDept, cleanNotes);
     const newUserId = Number(result.lastInsertRowid);
 
     // Audit log

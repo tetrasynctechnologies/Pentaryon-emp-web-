@@ -14,14 +14,15 @@ module.exports = {
     { username: 'joshua', name: 'J. Joshua', role: 'admin', department: 'Executive / CTO' },
     { username: 'kishore', name: 'B. Kishore', role: 'admin', department: 'Executive / CEO' },
     { username: 'jason', name: 'A. Jason Kister', role: 'admin', department: 'Executive / COO' },
-    { username: 'akshay', name: 'Akshay Kumar', role: 'admin', department: 'Executive / Co-CTO' }
+    { username: 'akshay', name: 'Akshay Kumar M', role: 'admin', department: 'Executive / Co-CTO', email: 'akshaykumar.20073170@gmail.com' }
   ],
 
   // Pre-configured Foundational Employees
   employees: [
-    { username: 'prashetha', name: 'Prashetha', role: 'employee', department: 'Web management' },
-    { username: 'chethana', name: 'Chethana', role: 'employee', department: 'Digital marketing' },
-    { username: 'surya', name: 'Surya', role: 'employee', department: 'Cyber Security' },
+    { username: 'prashetha', name: 'Prashetha G M', role: 'employee', department: 'Web management', email: 'prashe03@gmail.com' },
+    { username: 'chethana', name: 'Chethana .K', role: 'employee', department: 'Digital marketing', email: 'chethanakollu@gmail.com' },
+    { username: 'surya', name: 'Surya V', role: 'employee', department: 'Cyber Security', email: 'suryavelmurugan05@gmail.com' },
+    { username: 'bhuvanika', name: 'Bhuvanika Ch', role: 'employee', department: 'Video Editor', email: 'chennurubhuvanika@gmail.com' },
     { username: 'harish', name: 'Harish', role: 'employee', department: 'Designer' }
   ],
 
@@ -30,12 +31,17 @@ module.exports = {
     'Web management',
     'Digital marketing',
     'Cyber Security',
+    'Video Editor',
     'Designer',
     'Software & Embedded',
     'Hardware & Avionics',
     'Quality & Testing',
     'Operations'
   ],
+
+  // Gmail Notification Credentials
+  gmailUser: process.env.GMAIL_USER || 'tetrasynctech@gmail.com',
+  gmailAppPassword: process.env.GMAIL_APP_PASSWORD || '',
 
   adminDefaultPassword: process.env.ADMIN_DEFAULT_PASSWORD || 'Admin@TetraSync2026!',
   employeeDefaultPassword: process.env.EMPLOYEE_DEFAULT_PASSWORD || 'username@TetraSync!',

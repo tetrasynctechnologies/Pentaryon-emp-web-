@@ -39,6 +39,7 @@ localDb.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     username TEXT UNIQUE NOT NULL,
+    email TEXT NULL,
     password_hash TEXT NOT NULL,
     salt TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'employee',
@@ -133,26 +134,31 @@ function verifyPassword(password, hash, salt) {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
+// Run non-destructive column migration for email
+try {
+  localDb.exec(`ALTER TABLE users ADD COLUMN email TEXT NULL;`);
+} catch (_) {}
+
 // Seed Initial Admin and Foundational Employee Accounts with deterministic IDs
 function seedAccounts() {
   const insertUserStmt = localDb.prepare(`
-    INSERT OR REPLACE INTO users (id, name, username, password_hash, salt, role, department, status, approved_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', CURRENT_TIMESTAMP)
+    INSERT OR REPLACE INTO users (id, name, username, email, password_hash, salt, role, department, status, approved_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'approved', CURRENT_TIMESTAMP)
   `);
 
   // Seed Admins: 1: joshua, 2: kishore, 3: jason, 4: akshay
   config.admins.forEach((admin, idx) => {
     const fixedId = idx + 1;
     const { hash, salt } = hashPassword(config.adminDefaultPassword);
-    insertUserStmt.run(fixedId, admin.name, admin.username.toLowerCase(), hash, salt, 'admin', admin.department);
+    insertUserStmt.run(fixedId, admin.name, admin.username.toLowerCase(), admin.email || null, hash, salt, 'admin', admin.department);
   });
 
-  // Seed Foundational Employees: 5: prashetha, 6: chethana, 7: surya, 8: harish
+  // Seed Foundational Employees: 5: prashetha, 6: chethana, 7: surya, 8: bhuvanika, 9: harish
   config.employees.forEach((emp, idx) => {
     const fixedId = idx + 5;
     const empPassword = config.getEmployeeDefaultPassword(emp.username);
     const { hash, salt } = hashPassword(empPassword);
-    insertUserStmt.run(fixedId, emp.name, emp.username.toLowerCase(), hash, salt, 'employee', emp.department);
+    insertUserStmt.run(fixedId, emp.name, emp.username.toLowerCase(), emp.email || null, hash, salt, 'employee', emp.department);
   });
 }
 
@@ -167,6 +173,7 @@ async function initTursoRemote() {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         username TEXT UNIQUE NOT NULL,
+        email TEXT NULL,
         password_hash TEXT NOT NULL,
         salt TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'employee',
@@ -213,15 +220,26 @@ async function initTursoRemote() {
       );
     `);
 
+    // Non-destructive Turso cloud column migration for email
+    try {
+      await turso.execute(`ALTER TABLE users ADD COLUMN email TEXT;`);
+    } catch (_) {}
+
     // Ensure seed accounts exist in remote Turso
     for (let idx = 0; idx < config.admins.length; idx++) {
       const admin = config.admins[idx];
       const fixedId = idx + 1;
       const { hash, salt } = hashPassword(config.adminDefaultPassword);
       await turso.execute({
-        sql: `INSERT OR IGNORE INTO users (id, name, username, password_hash, salt, role, department, status, approved_at) VALUES (?, ?, ?, ?, ?, 'admin', ?, 'approved', CURRENT_TIMESTAMP)`,
-        args: [fixedId, admin.name, admin.username.toLowerCase(), hash, salt, admin.department]
+        sql: `INSERT OR IGNORE INTO users (id, name, username, email, password_hash, salt, role, department, status, approved_at) VALUES (?, ?, ?, ?, ?, ?, 'admin', ?, 'approved', CURRENT_TIMESTAMP)`,
+        args: [fixedId, admin.name, admin.username.toLowerCase(), admin.email || null, hash, salt, admin.department]
       });
+      if (admin.email) {
+        await turso.execute({
+          sql: `UPDATE users SET email = ? WHERE username = ?`,
+          args: [admin.email, admin.username.toLowerCase()]
+        });
+      }
     }
     for (let idx = 0; idx < config.employees.length; idx++) {
       const emp = config.employees[idx];
@@ -229,13 +247,13 @@ async function initTursoRemote() {
       const empPassword = config.getEmployeeDefaultPassword(emp.username);
       const { hash, salt } = hashPassword(empPassword);
       await turso.execute({
-        sql: `INSERT OR IGNORE INTO users (id, name, username, password_hash, salt, role, department, status, approved_at) VALUES (?, ?, ?, ?, ?, 'employee', ?, 'approved', CURRENT_TIMESTAMP)`,
-        args: [fixedId, emp.name, emp.username.toLowerCase(), hash, salt, emp.department]
+        sql: `INSERT OR IGNORE INTO users (id, name, username, email, password_hash, salt, role, department, status, approved_at) VALUES (?, ?, ?, ?, ?, ?, 'employee', ?, 'approved', CURRENT_TIMESTAMP)`,
+        args: [fixedId, emp.name, emp.username.toLowerCase(), emp.email || null, hash, salt, emp.department]
       });
-      // Ensure existing foundational accounts in Turso also receive the updated username@TetraSync! credentials
+      // Ensure existing foundational accounts in Turso receive updated name, email, department, and password credentials
       await turso.execute({
-        sql: `UPDATE users SET password_hash = ?, salt = ? WHERE username = ?`,
-        args: [hash, salt, emp.username.toLowerCase()]
+        sql: `UPDATE users SET name = ?, department = ?, email = ?, password_hash = ?, salt = ? WHERE username = ?`,
+        args: [emp.name, emp.department, emp.email || null, hash, salt, emp.username.toLowerCase()]
       });
     }
 
@@ -300,14 +318,15 @@ async function pullFromTurso() {
     const rUsers = await turso.execute('SELECT * FROM users');
     if (rUsers.rows && rUsers.rows.length > 0) {
       const insUser = localDb.prepare(`
-        INSERT OR REPLACE INTO users (id, name, username, password_hash, salt, role, department, status, rejection_reason, notes, created_at, approved_at, approved_by, last_login_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO users (id, name, username, email, password_hash, salt, role, department, status, rejection_reason, notes, created_at, approved_at, approved_by, last_login_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const u of rUsers.rows) {
         insUser.run(
           Number(u.id),
           String(u.name || ''),
           String(u.username || '').toLowerCase(),
+          u.email ? String(u.email) : null,
           String(u.password_hash || ''),
           String(u.salt || ''),
           String(u.role || 'employee'),

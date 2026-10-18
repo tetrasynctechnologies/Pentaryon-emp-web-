@@ -2,6 +2,7 @@ const express = require('express');
 const { db, syncTurso } = require('../db');
 const { requireAuth, requireAdmin } = require('../auth');
 const { sanitizeLogText } = require('../security');
+const { sendTaskAssignedEmail } = require('../email.service');
 
 const router = express.Router();
 
@@ -88,16 +89,16 @@ router.post('/', requireAdmin, async (req, res) => {
     let assignee = null;
     const assigneeId = parseInt(assigned_to, 10);
     if (!isNaN(assigneeId) && assigneeId > 0) {
-      assignee = db.prepare("SELECT id, name, username, status, department FROM users WHERE id = ?").get(assigneeId);
+      assignee = db.prepare("SELECT id, name, username, email, status, department FROM users WHERE id = ?").get(assigneeId);
     }
     if (!assignee && assigned_to) {
       const cleanUser = String(assigned_to).trim().toLowerCase();
-      assignee = db.prepare("SELECT id, name, username, status, department FROM users WHERE LOWER(username) = ?").get(cleanUser);
+      assignee = db.prepare("SELECT id, name, username, email, status, department FROM users WHERE LOWER(username) = ?").get(cleanUser);
     }
     if (!assignee && !isNaN(assigneeId)) {
-      const legacyMap = { 5: 'prashetha', 6: 'chethana', 9: 'chethana', 7: 'surya', 10: 'surya', 8: 'harish', 11: 'harish' };
+      const legacyMap = { 5: 'prashetha', 6: 'chethana', 9: 'chethana', 7: 'surya', 10: 'surya', 8: 'bhuvanika', 11: 'harish' };
       if (legacyMap[assigneeId]) {
-        assignee = db.prepare("SELECT id, name, username, status, department FROM users WHERE LOWER(username) = ?").get(legacyMap[assigneeId]);
+        assignee = db.prepare("SELECT id, name, username, email, status, department FROM users WHERE LOWER(username) = ?").get(legacyMap[assigneeId]);
       }
     }
 
@@ -153,6 +154,31 @@ router.post('/', requireAdmin, async (req, res) => {
       JOIN users u ON t.assigned_to = u.id
       WHERE t.id = ?
     `).get(taskId);
+
+    // Automated Gmail Notification Dispatch
+    try {
+      const emailResult = await sendTaskAssignedEmail({
+        task: {
+          id: taskId,
+          title: title.trim(),
+          description: description.trim(),
+          priority: cleanPriority,
+          category: cleanCategory,
+          due_date: cleanDueDate
+        },
+        assignee,
+        creator: req.user
+      });
+
+      if (emailResult.success) {
+        db.prepare(`
+          INSERT INTO audit_logs (action, actor_id, target_id, details)
+          VALUES ('TASK_EMAIL_DISPATCHED', ?, ?, ?)
+        `).run(req.user.id, taskId, sanitizeLogText(`Dispatched official task briefing email to ${assignee.email} from tetrasynctech@gmail.com`));
+      }
+    } catch (mailErr) {
+      console.warn('[Task Email Dispatch Warning]', mailErr.message);
+    }
 
     try { syncTurso(true); } catch (_) {}
 

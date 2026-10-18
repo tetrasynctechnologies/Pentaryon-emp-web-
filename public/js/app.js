@@ -247,6 +247,7 @@ function admin() {
               <span class="badge am">Pending</span>
             </div>
             <div class="mono cy">@${esc(u.username)}</div>
+            ${u.email ? `<div class="mono mu" style="font-size:12px;margin:2px 0">${esc(u.email)}</div>` : ''}
             <p style="margin:8px 0 2px">${esc(u.department || 'General')}</p>
             <div class="mono mu" style="font-size:12px">${dt(u.created_at)}</div>
             <p class="mu">${esc(u.notes || 'No note provided.')}</p>
@@ -282,10 +283,11 @@ function admin() {
               <div style="min-width:0;flex:1">
                 <b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px">${esc(u.name)}</b>
                 <div class="mono mu" style="font-size:12px">@${esc(u.username)}</div>
+                ${u.email ? `<div class="mono cy" style="font-size:11px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(u.email)}">${esc(u.email)}</div>` : ''}
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
-              <button class="no" data-a="ee" data-id="${u.id}" data-name="${esc(u.name)}" data-u="${esc(u.username)}" data-d="${esc(u.department || 'General')}" title="Edit employee ${esc(u.name)}" aria-label="Edit employee ${esc(u.name)}" style="padding:6px 9px;border-color:var(--line);color:var(--cy)">
+              <button class="no" data-a="ee" data-id="${u.id}" data-name="${esc(u.name)}" data-u="${esc(u.username)}" data-d="${esc(u.department || 'General')}" data-e="${esc(u.email || '')}" title="Edit employee ${esc(u.name)}" aria-label="Edit employee ${esc(u.name)}" style="padding:6px 9px;border-color:var(--line);color:var(--cy)">
                 ${ic('edit')}
               </button>
               <button class="no" data-a="de" data-id="${u.id}" data-name="${esc(u.name)}" data-u="${esc(u.username)}" title="Delete employee" aria-label="Delete employee ${esc(u.name)}" style="padding:6px 9px">
@@ -473,6 +475,8 @@ const act = {
       <input name="n" required autocomplete="name" placeholder="e.g. Maya Lin">
       <label>Desired Username</label>
       <input name="u" class="mono" required pattern="[a-z0-9._]{3,30}" autocapitalize="none" placeholder="e.g. maya.l">
+      <label>Email Address (for task briefings)</label>
+      <input name="e" type="email" autocomplete="email" placeholder="e.g. employee@gmail.com">
       <label>Create Password</label>
       <input name="p" type="password" required minlength="8" placeholder="Minimum 8 characters">
       <label>Department / Role</label>
@@ -542,6 +546,10 @@ const act = {
       </select>
       <label>Due Date</label>
       <input name="due" type="date" required value="${new Date(Date.now() + 864e5 * 7).toISOString().split('T')[0]}">
+      <div class="row" style="margin-top:12px;padding:9px 12px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.2);border-radius:6px;gap:8px;align-items:center;">
+        <span style="color:var(--cy);font-size:15px;">✉</span>
+        <span class="mu" style="font-size:11px;line-height:1.4">An official task briefing email will automatically be dispatched to the employee's Gmail from <b class="cy">tetrasynctech@gmail.com</b>.</span>
+      </div>
       <div class="alert cr" id="tk-er" hidden style="margin-top:12px"></div>
       <div class="act" style="margin-top:16px"><button class="p" style="width:100%">Delegate Task</button></div>
     </form>`
@@ -638,6 +646,8 @@ const act = {
       <input name="n" required placeholder="e.g. Rachel Adams">
       <label>Username</label>
       <input name="u" class="mono" required pattern="[a-z0-9._]{3,30}" autocapitalize="none" placeholder="e.g. rachel.a">
+      <label>Email Address (for task briefings)</label>
+      <input name="e" type="email" placeholder="e.g. employee@gmail.com">
       <label>Password</label>
       <input name="p" type="password" required minlength="8" placeholder="Minimum 8 characters">
       <label>Department / Role</label>
@@ -656,6 +666,8 @@ const act = {
       <input type="hidden" name="emp_id" value="${esc(d.id)}">
       <label>Full Name</label>
       <input name="n" value="${esc(d.name)}" required placeholder="e.g. Rachel Adams">
+      <label>Email Address (for task briefings)</label>
+      <input name="e" type="email" value="${esc(d.e || '')}" placeholder="e.g. employee@gmail.com">
       <label>Department / Role</label>
       <input name="d" list="dept-list-ee" value="${esc(d.d)}" required placeholder="Type or select department / role" autocomplete="off">
       <datalist id="dept-list-ee">
@@ -748,6 +760,7 @@ document.addEventListener('submit', async (e) => {
   if (formId === 'rq') {
     const n = v('n');
     const u = v('u').toLowerCase();
+    const e = v('e');
     const p = v('p');
     const d = v('d');
     const x = v('x');
@@ -759,6 +772,7 @@ document.addEventListener('submit', async (e) => {
         body: JSON.stringify({
           name: n,
           username: u,
+          email: e,
           password: p,
           department: d,
           notes: x
@@ -888,13 +902,14 @@ document.addEventListener('submit', async (e) => {
   if (formId === 'em_form') {
     const n = v('n');
     const u = v('u').toLowerCase();
+    const e = v('e');
     const p = v('p');
     const d = v('d');
     const er = $('#ne-er');
     try {
       await api('/api/admin/employees', {
         method: 'POST',
-        body: JSON.stringify({ name: n, username: u, password: p, department: d })
+        body: JSON.stringify({ name: n, username: u, email: e, password: p, department: d })
       });
       close();
       await loadDataAndRender();
@@ -911,12 +926,13 @@ document.addEventListener('submit', async (e) => {
   if (formId === 'ee_form') {
     const id = v('emp_id');
     const n = v('n');
+    const e = v('e');
     const d = v('d');
     const er = $('#ee-er');
     try {
       await api(`/api/admin/employees/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ name: n, department: d })
+        body: JSON.stringify({ name: n, email: e, department: d })
       });
       close();
       await loadDataAndRender();

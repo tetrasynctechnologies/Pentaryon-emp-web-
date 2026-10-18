@@ -16,7 +16,7 @@ router.get('/requests', async (req, res) => {
   try {
     try { await syncTurso(); } catch (_) {}
     const requests = db.prepare(`
-      SELECT id, name, username, department, status, notes, created_at
+      SELECT id, name, username, email, department, status, notes, created_at
       FROM users
       WHERE status = 'pending'
       ORDER BY created_at DESC
@@ -238,6 +238,7 @@ router.get('/employees', async (req, res) => {
         u.id, 
         u.name, 
         u.username, 
+        u.email,
         u.department, 
         u.status, 
         u.created_at, 
@@ -309,7 +310,7 @@ router.delete('/employees/:id', async (req, res) => {
  */
 router.patch('/employees/:id', async (req, res) => {
   try {
-    const { name, department, username } = req.body || {};
+    const { name, department, email, username } = req.body || {};
     let employee = await findEmployeeUser(req.params.id, username);
 
     if (!employee) {
@@ -335,6 +336,15 @@ router.patch('/employees/:id', async (req, res) => {
       params.push(cleanDept);
     }
 
+    if (email !== undefined) {
+      const cleanEmail = (email && typeof email === 'string' && email.trim()) ? email.trim().toLowerCase() : null;
+      if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        return res.status(400).json({ error: 'Please enter a valid email address.' });
+      }
+      updates.push('email = ?');
+      params.push(cleanEmail);
+    }
+
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No fields provided for update.' });
     }
@@ -352,9 +362,12 @@ router.patch('/employees/:id', async (req, res) => {
       sanitizeLogText(`Admin ${req.user.username} updated employee @${employee.username}: ${updates.join(', ')}`)
     );
 
+    const updated = db.prepare('SELECT id, name, username, role, department, email FROM users WHERE id = ?').get(employee.id);
+
     return res.json({
       success: true,
-      message: `Employee @${employee.username} updated successfully.`
+      message: `Employee @${employee.username} updated successfully.`,
+      employee: updated
     });
   } catch (err) {
     console.error('Update employee error:', err);
@@ -368,7 +381,7 @@ router.patch('/employees/:id', async (req, res) => {
  */
 router.post('/employees', (req, res) => {
   try {
-    const { name, username, password, department } = req.body;
+    const { name, username, email, password, department } = req.body;
     if (!name || typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100) {
       return res.status(400).json({ error: 'Full name is required (between 2 and 100 characters).' });
     }
@@ -379,6 +392,15 @@ router.post('/employees', (req, res) => {
     if (!/^[a-z0-9_.-]{3,30}$/.test(cleanUsername)) {
       return res.status(400).json({ error: 'Username must be 3-30 characters (letters, numbers, dots, hyphens, underscores).' });
     }
+
+    let cleanEmail = null;
+    if (email && typeof email === 'string' && email.trim()) {
+      cleanEmail = email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        return res.status(400).json({ error: 'Please enter a valid email address.' });
+      }
+    }
+
     if (!password || typeof password !== 'string' || password.length < 8 || password.length > 128) {
       return res.status(400).json({ error: 'Password must be between 8 and 128 characters.' });
     }
@@ -393,9 +415,9 @@ router.post('/employees', (req, res) => {
     const { hashPassword } = require('../db');
     const { hash, salt } = hashPassword(password);
     const result = db.prepare(`
-      INSERT INTO users (name, username, password_hash, salt, role, department, status, approved_at, approved_by)
-      VALUES (?, ?, ?, ?, 'employee', ?, 'approved', CURRENT_TIMESTAMP, ?)
-    `).run(cleanName, cleanUsername, hash, salt, cleanDept, req.user.id);
+      INSERT INTO users (name, username, email, password_hash, salt, role, department, status, approved_at, approved_by)
+      VALUES (?, ?, ?, ?, ?, 'employee', ?, 'approved', CURRENT_TIMESTAMP, ?)
+    `).run(cleanName, cleanUsername, cleanEmail, hash, salt, cleanDept, req.user.id);
 
     const newId = Number(result.lastInsertRowid);
     db.prepare(`
@@ -406,7 +428,7 @@ router.post('/employees', (req, res) => {
     return res.status(201).json({
       success: true,
       message: `Employee ${name.trim()} (@${cleanUsername}) created successfully.`,
-      employee: { id: newId, name: name.trim(), username: cleanUsername, department: cleanDept }
+      employee: { id: newId, name: name.trim(), username: cleanUsername, email: cleanEmail, department: cleanDept }
     });
   } catch (err) {
     console.error('Create employee error:', err);
