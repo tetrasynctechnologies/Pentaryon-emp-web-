@@ -11,9 +11,9 @@ module.exports = {
   
   // Pre-configured Administrators
   admins: [
-    { username: 'joshua', name: 'J. Joshua', role: 'admin', department: 'Executive / CTO' },
-    { username: 'kishore', name: 'B. Kishore', role: 'admin', department: 'Executive / CEO' },
-    { username: 'jason', name: 'A. Jason Kister', role: 'admin', department: 'Executive / COO' },
+    { username: 'joshua', name: 'J. Joshua', role: 'admin', department: 'Executive / CTO', email: 'joshuaaarik@gmail.com' },
+    { username: 'kishore', name: 'B. Kishore', role: 'admin', department: 'Executive / CEO', email: 'kishore26005@gmail.com' },
+    { username: 'jason', name: 'A. Jason Kister', role: 'admin', department: 'Executive / COO', email: 'jasonkester65@gmail.com' },
     { username: 'akshay', name: 'Akshay Kumar M', role: 'admin', department: 'Executive / Co-CTO', email: 'akshaykumar.20073170@gmail.com' }
   ],
 
