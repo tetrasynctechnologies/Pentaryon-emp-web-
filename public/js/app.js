@@ -192,7 +192,7 @@ const card = (t, emp) => `
   <article class="card">
     <div class="row">${pill(t)}${due(t)}</div>
     <h3 style="margin:10px 0 4px;font-size:15px">${esc(t.t)}</h3>
-    <p class="mu" style="margin:0 0 10px">${esc(t.d)}</p>
+    <p class="mu card-desc">${esc(t.d)}</p>
     <div class="row mono mu" style="font-size:12px">
       <span>${esc(t.c)} · ${emp ? t.s : '@' + esc(t.to)}</span>
       <span>${t.pct}%</span>
@@ -630,6 +630,16 @@ const act = {
         `
       <input type="hidden" name="task_id" value="${t.id}">
       <input type="hidden" name="id" value="${t.id}">
+      ${
+        t.d
+          ? `
+      <div class="task-scope-box">
+        <div class="task-scope-lbl">Assignment Scope & Instructions</div>
+        <div class="task-scope-body">${esc(t.d)}</div>
+      </div>
+      `
+          : ''
+      }
       <label>Status</label>
       <select name="s">
         ${ST.map((s) => `<option value="${s}"${s == t.s ? ' selected' : ''}>${s}</option>`).join('')}
