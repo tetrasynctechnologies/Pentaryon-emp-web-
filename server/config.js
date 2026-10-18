@@ -40,8 +40,8 @@ module.exports = {
   ],
 
   // Gmail Notification Credentials
-  gmailUser: process.env.GMAIL_USER || 'tetrasynctech@gmail.com',
-  gmailAppPassword: process.env.GMAIL_APP_PASSWORD || '',
+  gmailUser: (process.env.GMAIL_USER || 'tetrasynctech@gmail.com').trim(),
+  gmailAppPassword: (process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, ''),
 
   adminDefaultPassword: process.env.ADMIN_DEFAULT_PASSWORD || 'Admin@TetraSync2026!',
   employeeDefaultPassword: process.env.EMPLOYEE_DEFAULT_PASSWORD || 'username@TetraSync!',
