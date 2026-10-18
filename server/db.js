@@ -141,24 +141,43 @@ try {
 
 // Seed Initial Admin and Foundational Employee Accounts with deterministic IDs
 function seedAccounts() {
-  const insertUserStmt = localDb.prepare(`
-    INSERT OR REPLACE INTO users (id, name, username, email, password_hash, salt, role, department, status, approved_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'approved', CURRENT_TIMESTAMP)
-  `);
-
   // Seed Admins: 1: joshua, 2: kishore, 3: jason, 4: akshay
   config.admins.forEach((admin, idx) => {
-    const fixedId = idx + 1;
+    const cleanUser = admin.username.toLowerCase();
+    const existing = localDb.prepare('SELECT id FROM users WHERE username = ?').get(cleanUser);
     const { hash, salt } = hashPassword(config.adminDefaultPassword);
-    insertUserStmt.run(fixedId, admin.name, admin.username.toLowerCase(), admin.email || null, hash, salt, 'admin', admin.department);
+    if (existing) {
+      localDb.prepare(`
+        UPDATE users SET name = ?, department = ?, email = ?, password_hash = ?, salt = ?, role = 'admin', status = 'approved'
+        WHERE id = ?
+      `).run(admin.name, admin.department, admin.email || null, hash, salt, existing.id);
+    } else {
+      const fixedId = idx + 1;
+      localDb.prepare(`
+        INSERT OR IGNORE INTO users (id, name, username, email, password_hash, salt, role, department, status, approved_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'admin', ?, 'approved', CURRENT_TIMESTAMP)
+      `).run(fixedId, admin.name, cleanUser, admin.email || null, hash, salt, admin.department);
+    }
   });
 
   // Seed Foundational Employees: 5: prashetha, 6: chethana, 7: surya, 8: bhuvanika, 9: harish
   config.employees.forEach((emp, idx) => {
-    const fixedId = idx + 5;
-    const empPassword = config.getEmployeeDefaultPassword(emp.username);
+    const cleanUser = emp.username.toLowerCase();
+    const existing = localDb.prepare('SELECT id FROM users WHERE username = ?').get(cleanUser);
+    const empPassword = config.getEmployeeDefaultPassword(cleanUser);
     const { hash, salt } = hashPassword(empPassword);
-    insertUserStmt.run(fixedId, emp.name, emp.username.toLowerCase(), emp.email || null, hash, salt, 'employee', emp.department);
+    if (existing) {
+      localDb.prepare(`
+        UPDATE users SET name = ?, department = ?, email = ?, password_hash = ?, salt = ?, role = 'employee', status = 'approved'
+        WHERE id = ?
+      `).run(emp.name, emp.department, emp.email || null, hash, salt, existing.id);
+    } else {
+      const fixedId = idx + 5;
+      localDb.prepare(`
+        INSERT OR IGNORE INTO users (id, name, username, email, password_hash, salt, role, department, status, approved_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'employee', ?, 'approved', CURRENT_TIMESTAMP)
+      `).run(fixedId, emp.name, cleanUser, emp.email || null, hash, salt, emp.department);
+    }
   });
 }
 
@@ -228,33 +247,65 @@ async function initTursoRemote() {
     // Ensure seed accounts exist in remote Turso
     for (let idx = 0; idx < config.admins.length; idx++) {
       const admin = config.admins[idx];
+      const cleanUser = admin.username.toLowerCase();
       const fixedId = idx + 1;
       const { hash, salt } = hashPassword(config.adminDefaultPassword);
-      await turso.execute({
-        sql: `INSERT OR IGNORE INTO users (id, name, username, email, password_hash, salt, role, department, status, approved_at) VALUES (?, ?, ?, ?, ?, ?, 'admin', ?, 'approved', CURRENT_TIMESTAMP)`,
-        args: [fixedId, admin.name, admin.username.toLowerCase(), admin.email || null, hash, salt, admin.department]
+
+      const userCheck = await turso.execute({
+        sql: `SELECT id FROM users WHERE LOWER(username) = ?`,
+        args: [cleanUser]
       });
-      if (admin.email) {
+
+      if (userCheck.rows && userCheck.rows.length > 0) {
         await turso.execute({
-          sql: `UPDATE users SET email = ? WHERE username = ?`,
-          args: [admin.email, admin.username.toLowerCase()]
+          sql: `UPDATE users SET name = ?, department = ?, email = ?, password_hash = ?, salt = ?, role = 'admin', status = 'approved' WHERE LOWER(username) = ?`,
+          args: [admin.name, admin.department, admin.email || null, hash, salt, cleanUser]
         });
+      } else {
+        try {
+          await turso.execute({
+            sql: `INSERT INTO users (id, name, username, email, password_hash, salt, role, department, status, approved_at) VALUES (?, ?, ?, ?, ?, ?, 'admin', ?, 'approved', CURRENT_TIMESTAMP)`,
+            args: [fixedId, admin.name, cleanUser, admin.email || null, hash, salt, admin.department]
+          });
+        } catch (_) {
+          await turso.execute({
+            sql: `INSERT INTO users (name, username, email, password_hash, salt, role, department, status, approved_at) VALUES (?, ?, ?, ?, ?, 'admin', ?, 'approved', CURRENT_TIMESTAMP)`,
+            args: [admin.name, cleanUser, admin.email || null, hash, salt, admin.department]
+          });
+        }
       }
     }
+
     for (let idx = 0; idx < config.employees.length; idx++) {
       const emp = config.employees[idx];
+      const cleanUser = emp.username.toLowerCase();
       const fixedId = idx + 5;
-      const empPassword = config.getEmployeeDefaultPassword(emp.username);
+      const empPassword = config.getEmployeeDefaultPassword(cleanUser);
       const { hash, salt } = hashPassword(empPassword);
-      await turso.execute({
-        sql: `INSERT OR IGNORE INTO users (id, name, username, email, password_hash, salt, role, department, status, approved_at) VALUES (?, ?, ?, ?, ?, ?, 'employee', ?, 'approved', CURRENT_TIMESTAMP)`,
-        args: [fixedId, emp.name, emp.username.toLowerCase(), emp.email || null, hash, salt, emp.department]
+
+      const userCheck = await turso.execute({
+        sql: `SELECT id FROM users WHERE LOWER(username) = ?`,
+        args: [cleanUser]
       });
-      // Ensure existing foundational accounts in Turso receive updated name, email, department, and password credentials
-      await turso.execute({
-        sql: `UPDATE users SET name = ?, department = ?, email = ?, password_hash = ?, salt = ? WHERE username = ?`,
-        args: [emp.name, emp.department, emp.email || null, hash, salt, emp.username.toLowerCase()]
-      });
+
+      if (userCheck.rows && userCheck.rows.length > 0) {
+        await turso.execute({
+          sql: `UPDATE users SET name = ?, department = ?, email = ?, password_hash = ?, salt = ?, role = 'employee', status = 'approved' WHERE LOWER(username) = ?`,
+          args: [emp.name, emp.department, emp.email || null, hash, salt, cleanUser]
+        });
+      } else {
+        try {
+          await turso.execute({
+            sql: `INSERT INTO users (id, name, username, email, password_hash, salt, role, department, status, approved_at) VALUES (?, ?, ?, ?, ?, ?, 'employee', ?, 'approved', CURRENT_TIMESTAMP)`,
+            args: [fixedId, emp.name, cleanUser, emp.email || null, hash, salt, emp.department]
+          });
+        } catch (_) {
+          await turso.execute({
+            sql: `INSERT INTO users (name, username, email, password_hash, salt, role, department, status, approved_at) VALUES (?, ?, ?, ?, ?, 'employee', ?, 'approved', CURRENT_TIMESTAMP)`,
+            args: [emp.name, cleanUser, emp.email || null, hash, salt, emp.department]
+          });
+        }
+      }
     }
 
     // Initial pull
@@ -334,10 +385,16 @@ async function pullFromTurso() {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const u of rUsers.rows) {
+        const cleanU = String(u.username || '').toLowerCase();
+        // If a local user exists with this username under a different ID, delete the local conflicting row first
+        const localConflict = localDb.prepare('SELECT id FROM users WHERE username = ?').get(cleanU);
+        if (localConflict && localConflict.id !== Number(u.id)) {
+          localDb.prepare('DELETE FROM users WHERE id = ?').run(localConflict.id);
+        }
         insUser.run(
           Number(u.id),
           String(u.name || ''),
-          String(u.username || '').toLowerCase(),
+          cleanU,
           u.email ? String(u.email) : null,
           String(u.password_hash || ''),
           String(u.salt || ''),
@@ -358,10 +415,26 @@ async function pullFromTurso() {
   }
 }
 
+let tursoInitPromise = null;
+if (turso) {
+  tursoInitPromise = initTursoRemote().catch((err) => {
+    console.warn('[Turso Background Init Warning]', err.message);
+  });
+}
+
+async function ensureTursoInit() {
+  if (tursoInitPromise) {
+    try {
+      await tursoInitPromise;
+    } catch (_) {}
+  }
+}
+
 let lastSyncTime = 0;
 let isSyncing = false;
 async function syncTurso(force = false) {
   if (!turso || isSyncing) return;
+  await ensureTursoInit();
   const now = Date.now();
   if (!force && now - lastSyncTime < 3000) return; // Debounce 3s
   lastSyncTime = now;
@@ -389,11 +462,6 @@ async function flushTurso() {
       console.warn('[Turso Flush Error]', err.message);
     }
   }
-}
-
-// Start remote init in background
-if (turso) {
-  initTursoRemote().catch(() => {});
 }
 
 function isMutationQuery(sql) {
@@ -454,5 +522,6 @@ module.exports = {
   hashPassword,
   verifyPassword,
   syncTurso,
-  flushTurso
+  flushTurso,
+  ensureTursoInit
 };

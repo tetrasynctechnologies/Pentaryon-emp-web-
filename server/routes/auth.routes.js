@@ -1,6 +1,7 @@
 const express = require('express');
-const { db, hashPassword, verifyPassword, syncTurso, flushTurso } = require('../db');
+const { db, turso, hashPassword, verifyPassword, syncTurso, flushTurso } = require('../db');
 const { createSession, deleteSession, requireAuth } = require('../auth');
+const config = require('../config');
 const {
   loginRateLimiter,
   recordFailedLogin,
@@ -134,6 +135,64 @@ router.post('/login', loginRateLimiter, async (req, res) => {
         FROM users
         WHERE username = ?
       `).get(cleanUsername);
+    }
+
+    // Foundational account self-healing fallback:
+    // If foundational employee or administrator is missing from local database/Turso, provision seamlessly
+    if (!user) {
+      const foundationalEmp = config.employees.find(e => e.username.toLowerCase() === cleanUsername);
+      const foundationalAdmin = config.admins.find(a => a.username.toLowerCase() === cleanUsername);
+
+      if (foundationalEmp) {
+        const empPassword = config.getEmployeeDefaultPassword(cleanUsername);
+        const { hash, salt } = hashPassword(empPassword);
+        try {
+          db.prepare(`
+            INSERT INTO users (name, username, email, password_hash, salt, role, department, status, approved_at)
+            VALUES (?, ?, ?, ?, ?, 'employee', ?, 'approved', CURRENT_TIMESTAMP)
+          `).run(foundationalEmp.name, cleanUsername, foundationalEmp.email || null, hash, salt, foundationalEmp.department);
+        } catch (_) {}
+
+        if (turso) {
+          try {
+            await turso.execute({
+              sql: `INSERT INTO users (name, username, email, password_hash, salt, role, department, status, approved_at)
+                    VALUES (?, ?, ?, ?, ?, 'employee', ?, 'approved', CURRENT_TIMESTAMP)`,
+              args: [foundationalEmp.name, cleanUsername, foundationalEmp.email || null, hash, salt, foundationalEmp.department]
+            });
+          } catch (_) {}
+        }
+
+        user = db.prepare(`
+          SELECT id, name, username, password_hash, salt, role, department, status, rejection_reason
+          FROM users
+          WHERE username = ?
+        `).get(cleanUsername);
+      } else if (foundationalAdmin) {
+        const { hash, salt } = hashPassword(config.adminDefaultPassword);
+        try {
+          db.prepare(`
+            INSERT INTO users (name, username, email, password_hash, salt, role, department, status, approved_at)
+            VALUES (?, ?, ?, ?, ?, 'admin', ?, 'approved', CURRENT_TIMESTAMP)
+          `).run(foundationalAdmin.name, cleanUsername, foundationalAdmin.email || null, hash, salt, foundationalAdmin.department);
+        } catch (_) {}
+
+        if (turso) {
+          try {
+            await turso.execute({
+              sql: `INSERT INTO users (name, username, email, password_hash, salt, role, department, status, approved_at)
+                    VALUES (?, ?, ?, ?, ?, 'admin', ?, 'approved', CURRENT_TIMESTAMP)`,
+              args: [foundationalAdmin.name, cleanUsername, foundationalAdmin.email || null, hash, salt, foundationalAdmin.department]
+            });
+          } catch (_) {}
+        }
+
+        user = db.prepare(`
+          SELECT id, name, username, password_hash, salt, role, department, status, rejection_reason
+          FROM users
+          WHERE username = ?
+        `).get(cleanUsername);
+      }
     }
 
     // Constant-time mitigation against timing enumeration attacks
