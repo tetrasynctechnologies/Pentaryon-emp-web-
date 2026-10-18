@@ -106,12 +106,26 @@ localDb.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS task_attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    file_type TEXT NOT NULL,
+    file_size INTEGER NOT NULL,
+    file_data TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
   CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
   CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
   CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks(assigned_to);
   CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
   CREATE INDEX IF NOT EXISTS idx_task_updates_task_id ON task_updates(task_id);
+  CREATE INDEX IF NOT EXISTS idx_task_attachments_task_id ON task_attachments(task_id);
 `);
 
 /**
@@ -235,6 +249,16 @@ async function initTursoRemote() {
         actor_id INTEGER NULL,
         target_id INTEGER NULL,
         details TEXT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS task_attachments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        filename TEXT NOT NULL,
+        file_type TEXT NOT NULL,
+        file_size INTEGER NOT NULL,
+        file_data TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -376,6 +400,34 @@ async function pullFromTurso() {
     } else {
       localDb.exec('DELETE FROM task_updates;');
     }
+
+    // Sync task_attachments
+    try {
+      const rAttachments = await turso.execute('SELECT * FROM task_attachments');
+      if (rAttachments.rows && rAttachments.rows.length > 0) {
+        const insAtt = localDb.prepare(`
+          INSERT OR REPLACE INTO task_attachments (id, task_id, user_id, filename, file_type, file_size, file_data, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const a of rAttachments.rows) {
+          insAtt.run(
+            Number(a.id),
+            Number(a.task_id),
+            Number(a.user_id),
+            String(a.filename),
+            String(a.file_type),
+            Number(a.file_size),
+            String(a.file_data),
+            String(a.created_at)
+          );
+        }
+        const tursoAttIds = rAttachments.rows.map(a => Number(a.id));
+        const attPlaceholders = tursoAttIds.map(() => '?').join(',');
+        localDb.prepare(`DELETE FROM task_attachments WHERE id NOT IN (${attPlaceholders})`).run(...tursoAttIds);
+      } else {
+        localDb.exec('DELETE FROM task_attachments;');
+      }
+    } catch (_) {}
 
     // Sync users defensively
     const rUsers = await turso.execute('SELECT * FROM users');

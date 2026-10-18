@@ -661,6 +661,53 @@ async function runTests() {
     );
     assert(emailPatchRes.status === 200 && emailPatchRes.data.employee.email === 'chennurubhuvanika@gmail.com', 'Admin successfully updates and persists employee email');
 
+    // Test 56: Task Attachments - Upload valid document deliverable
+    const sampleContent = Buffer.from('TetraSync Flight Avionics Technical Blueprint Specification v1.0').toString('base64');
+    const uploadRes = await request(
+      'POST',
+      `/api/tasks/${suryaTaskId}/attachments`,
+      {
+        filename: 'avionics_schematic.pdf',
+        file_type: 'application/pdf',
+        file_data: sampleContent
+      },
+      { Cookie: adminCookie }
+    );
+    assert(uploadRes.status === 201 && uploadRes.data.attachment.id, 'Task Attachments: Administrator uploads valid document deliverable');
+    const attId = uploadRes.data.attachment.id;
+
+    // Test 57: Task Attachments - List metadata
+    const listAttRes = await request('GET', `/api/tasks/${suryaTaskId}/attachments`, null, { Cookie: adminCookie });
+    assert(
+      listAttRes.status === 200 && listAttRes.data.attachments?.some((a) => a.id === attId),
+      'Task Attachments: Retrieve metadata list of task attachments'
+    );
+
+    // Test 58: Task Attachments - Download content & MIME type verification
+    const downloadRes = await request('GET', `/api/tasks/${suryaTaskId}/attachments/${attId}`, null, { Cookie: adminCookie });
+    assert(
+      downloadRes.status === 200 && downloadRes.headers['content-type']?.includes('application/pdf'),
+      'Task Attachments: Download attachment streams correct binary MIME type'
+    );
+
+    // Test 59: Task Attachments - Oversized file boundary (>5MB) rejected
+    const bigData = Buffer.alloc(5.5 * 1024 * 1024, 'a').toString('base64');
+    const bigUploadRes = await request(
+      'POST',
+      `/api/tasks/${suryaTaskId}/attachments`,
+      {
+        filename: 'oversized_archive.zip',
+        file_type: 'application/zip',
+        file_data: bigData
+      },
+      { Cookie: adminCookie }
+    );
+    assert(bigUploadRes.status === 400 && bigUploadRes.data.error?.includes('5MB'), 'Task Attachments: Oversized file (>5MB) rejected with HTTP 400');
+
+    // Test 60: Task Attachments - Delete attachment
+    const delAttRes = await request('DELETE', `/api/tasks/${suryaTaskId}/attachments/${attId}`, null, { Cookie: adminCookie });
+    assert(delAttRes.status === 200 && delAttRes.data.success, 'Task Attachments: Delete attachment removes record');
+
     console.log(`\nResults: ${passed} / ${total} tests passed successfully.\n`);
   } catch (err) {
     console.error('Test execution failed with error:', err);
@@ -671,11 +718,12 @@ async function runTests() {
         PRAGMA foreign_keys = OFF;
         DELETE FROM tasks;
         DELETE FROM task_updates;
+        DELETE FROM task_attachments;
         DELETE FROM audit_logs;
         DELETE FROM sessions;
         DELETE FROM users WHERE username NOT IN ('joshua', 'kishore', 'jason', 'akshay', 'prashetha', 'chethana', 'surya', 'bhuvanika', 'harish');
         UPDATE users SET department = 'Cyber Security' WHERE username = 'surya';
-        DELETE FROM sqlite_sequence WHERE name IN ('tasks', 'task_updates', 'audit_logs');
+        DELETE FROM sqlite_sequence WHERE name IN ('tasks', 'task_updates', 'task_attachments', 'audit_logs');
         PRAGMA foreign_keys = ON;
       `);
     } catch (_) {}

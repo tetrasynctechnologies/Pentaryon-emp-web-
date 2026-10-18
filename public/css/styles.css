@@ -543,3 +543,98 @@ label {
     transition: none !important;
   }
 }
+
+/* Attachments & Asset Deliverables */
+.att-section {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.att-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.att-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tx);
+  margin: 0;
+}
+.att-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.att-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #0d111a;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  gap: 10px;
+  transition: border-color 0.15s ease;
+}
+.att-item:hover {
+  border-color: rgba(0, 210, 255, 0.4);
+}
+.att-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  flex: 1;
+}
+.att-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.att-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.att-meta a {
+  color: var(--cy);
+  text-decoration: none;
+  font-weight: 500;
+}
+.att-meta a:hover {
+  text-decoration: underline;
+}
+.att-meta span {
+  color: var(--mu);
+  font-size: 11px;
+  margin-left: 6px;
+}
+.att-dropzone {
+  border: 2px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 12px 16px;
+  text-align: center;
+  background: rgba(13, 17, 26, 0.5);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.att-dropzone:hover, .att-dropzone.drag-over {
+  border-color: var(--cy);
+  background: rgba(0, 210, 255, 0.05);
+}
+.att-btn-del {
+  background: none;
+  border: none;
+  color: var(--mu);
+  padding: 4px;
+  font-size: 13px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.att-btn-del:hover {
+  color: var(--cr);
+  background: rgba(239, 68, 68, 0.15);
+}

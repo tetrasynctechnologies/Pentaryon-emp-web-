@@ -9,6 +9,11 @@ module.exports = {
   tursoUrl: process.env.TURSO_DATABASE_URL || process.env.STORAGE_TURSO_DATABASE_URL || process.env.STORAGE_DATABASE_URL || process.env.TURSO_URL || process.env.STORAGE_URL,
   tursoAuthToken: process.env.TURSO_AUTH_TOKEN || process.env.STORAGE_TURSO_AUTH_TOKEN || process.env.STORAGE_AUTH_TOKEN || process.env.TURSO_TOKEN,
   
+  // Custom Domain & Production URLs
+  portalUrl: process.env.PORTAL_URL || 'https://tetrasync.tech',
+  fallbackPortalUrl: 'https://tetrasyncempweborg.vercel.app',
+  customDomain: 'tetrasync.tech',
+  
   // Pre-configured Administrators
   admins: [
     { username: 'joshua', name: 'J. Joshua', role: 'admin', department: 'Executive / CTO', email: 'joshuaaarik@gmail.com' },

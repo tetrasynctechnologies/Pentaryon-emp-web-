@@ -122,6 +122,24 @@ const toUiPriority = (p) =>
 
 const toApiPriority = (p) => (p ? p.toLowerCase() : 'medium');
 
+function formatBytes(bytes) {
+  if (!bytes || bytes <= 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function getAttIcon(mime) {
+  const m = String(mime || '').toLowerCase();
+  if (m.includes('image')) return '🖼️';
+  if (m.includes('pdf')) return '📄';
+  if (m.includes('zip') || m.includes('tar') || m.includes('rar') || m.includes('gzip')) return '📦';
+  if (m.includes('spreadsheet') || m.includes('excel') || m.includes('csv')) return '📊';
+  if (m.includes('text') || m.includes('json') || m.includes('javascript')) return '📝';
+  return '📎';
+}
+
 function mapTask(t) {
   const rawDue = t.due_date;
   const dueTimestamp = rawDue ? new Date(rawDue + 'T23:59:59').getTime() : null;
@@ -589,6 +607,7 @@ const act = {
   up: async (d) => {
     let t = T(d.id);
     let updates = [];
+    let attachments = [];
     try {
       const details = await api(`/api/tasks/${d.id}`);
       if (details.task) {
@@ -599,6 +618,7 @@ const act = {
         at: new Date(u.created_at).getTime(),
         x: u.note
       }));
+      attachments = details.attachments || [];
     } catch (_) {
       updates = t?.n || [];
     }
@@ -632,6 +652,39 @@ const act = {
       <div class="alert cr" id="ud-er" hidden style="margin-top:12px"></div>
       <div class="act" style="margin-top:16px"><button type="submit" id="btn-save-milestone" class="p" style="width:100%">Save Milestone</button></div>
     </form>
+
+    <!-- Attachments & Deliverables Section -->
+    <div class="att-section">
+      <div class="att-header">
+        <h4 class="att-title">Deliverables & Attachments (${attachments.length})</h4>
+        <label for="att-file-input" class="badge cy" style="cursor:pointer;margin:0">+ Add File</label>
+        <input type="file" id="att-file-input" style="display:none;">
+      </div>
+      <div class="att-list" id="task-att-list">
+        ${
+          attachments.length
+            ? attachments
+                .map(
+                  (a) => `
+              <div class="att-item" id="att-item-${a.id}">
+                <div class="att-info">
+                  <span class="att-icon">${getAttIcon(a.file_type)}</span>
+                  <div class="att-meta">
+                    <a href="/api/tasks/${t.id}/attachments/${a.id}" target="_blank" download="${esc(a.filename)}">${esc(a.filename)}</a>
+                    <span>(${formatBytes(a.file_size)}) &middot; by ${esc(a.uploader_name || a.uploader_username)}</span>
+                  </div>
+                </div>
+                ${(S.me?.admin || S.me?.id === a.user_id) ? `<button type="button" class="att-btn-del" data-a="del_att" data-taskid="${t.id}" data-attid="${a.id}" title="Delete file">✕</button>` : ''}
+              </div>
+            `
+                )
+                .join('')
+            : '<div class="mu" style="font-size:12px">No files or deliverables attached yet.</div>'
+        }
+      </div>
+      <div id="att-upload-status" class="mu" style="font-size:11px" hidden></div>
+    </div>
+
     <h4 style="margin:18px 0 0">Timeline</h4>
     <div class="tl">
       ${
@@ -650,6 +703,52 @@ const act = {
       }
     </div>`
     );
+
+    // Bind file upload handler
+    const fileInput = document.getElementById('att-file-input');
+    if (fileInput) {
+      fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 5 * 1024 * 1024) {
+          alert('File size exceeds the 5MB limit. Please choose a file under 5MB.');
+          fileInput.value = '';
+          return;
+        }
+        const statusEl = document.getElementById('att-upload-status');
+        if (statusEl) {
+          statusEl.hidden = false;
+          statusEl.textContent = `Uploading "${file.name}"...`;
+        }
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            await api(`/api/tasks/${t.id}/attachments`, {
+              method: 'POST',
+              body: JSON.stringify({
+                filename: file.name,
+                file_type: file.type || 'application/octet-stream',
+                file_data: reader.result
+              })
+            });
+            await act.up({ id: t.id });
+          } catch (uploadErr) {
+            alert(uploadErr.message || 'Failed to upload attachment');
+            if (statusEl) statusEl.hidden = true;
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  },
+  del_att: async (d) => {
+    if (!confirm('Are you sure you want to delete this attachment?')) return;
+    try {
+      await api(`/api/tasks/${d.taskid}/attachments/${d.attid}`, { method: 'DELETE' });
+      await act.up({ id: d.taskid });
+    } catch (err) {
+      alert(err.message);
+    }
   },
   del: async (d) => {
     if (!confirm('Are you sure you want to permanently delete this task?')) return;
