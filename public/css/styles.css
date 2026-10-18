@@ -398,3 +398,148 @@ label {
     font-size: 22px;
   }
 }
+
+/* ==========================================================================
+   Smooth Corporate Loading Animations & Top Stream Progress Bar
+   ========================================================================== */
+
+/* Top Global Stream Loader */
+.top-loader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2.5px;
+  background: linear-gradient(90deg, #00D2FF, #2563EB, #00E5FF, #00D2FF);
+  background-size: 200% 100%;
+  z-index: 9999;
+  opacity: 0;
+  transform: translateY(-100%);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+.top-loader.active {
+  opacity: 1;
+  transform: translateY(0);
+  animation: streamShimmer 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes streamShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Initial Splash Screen Loader */
+.initial-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 9990;
+  background: radial-gradient(800px 500px at 50% 45%, rgba(0, 210, 255, 0.08), transparent 70%), #0A0D14;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.45s;
+}
+.initial-loader.dismissed {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.loader-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  animation: loaderPulseIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.loader-logo-wrap {
+  position: relative;
+  width: 68px;
+  height: 68px;
+  display: grid;
+  place-items: center;
+}
+.loader-logo {
+  width: 58px;
+  height: 58px;
+  object-fit: contain;
+  position: relative;
+  z-index: 2;
+  filter: drop-shadow(0 0 16px rgba(0, 210, 255, 0.4));
+  animation: logoBreathing 2.2s ease-in-out infinite;
+}
+.loader-glow {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 210, 255, 0.35) 0%, rgba(37, 99, 235, 0.15) 50%, transparent 70%);
+  animation: glowPulsing 2.2s ease-in-out infinite alternate;
+  z-index: 1;
+  pointer-events: none;
+}
+.loader-bar-wrap {
+  width: 140px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 99px;
+  overflow: hidden;
+  position: relative;
+}
+.loader-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 50%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, transparent, #00D2FF, #2563EB, transparent);
+  animation: barSlide 1.5s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+.loader-sub {
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--mu);
+  opacity: 0.85;
+}
+
+@keyframes loaderPulseIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes logoBreathing {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+@keyframes glowPulsing {
+  0% { transform: scale(0.85); opacity: 0.4; }
+  100% { transform: scale(1.18); opacity: 0.9; }
+}
+@keyframes barSlide {
+  0% { left: -50%; width: 30%; }
+  50% { width: 60%; }
+  100% { left: 100%; width: 30%; }
+}
+
+/* Card and Content Entrance Animations */
+.card, .wrap, .kpis, main {
+  animation: cardEntrance 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes cardEntrance {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .top-loader, .initial-loader, .loader-logo, .loader-glow, .loader-bar, .card, .wrap, .kpis, main {
+    animation: none !important;
+    transition: none !important;
+  }
+}

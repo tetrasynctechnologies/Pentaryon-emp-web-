@@ -47,22 +47,52 @@ const S = {
   L: []
 };
 
+// Loader Control Helpers
+let activeRequests = 0;
+function showTopLoader() {
+  activeRequests++;
+  const t = $('#top-loader');
+  if (t) t.classList.add('active');
+}
+function hideTopLoader() {
+  activeRequests = Math.max(0, activeRequests - 1);
+  if (activeRequests === 0) {
+    const t = $('#top-loader');
+    if (t) t.classList.remove('active');
+  }
+}
+
+function dismissInitialLoader() {
+  const l = $('#initial-loader');
+  if (l && !l.classList.contains('dismissed')) {
+    l.classList.add('dismissed');
+    setTimeout(() => {
+      try { l.remove(); } catch (_) {}
+    }, 500);
+  }
+}
+
 // API Helpers
 async function api(path, options = {}) {
-  const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options
-  });
-  let data;
+  showTopLoader();
   try {
-    data = await res.json();
-  } catch (_) {
-    data = {};
+    const res = await fetch(path, {
+      headers: { 'Content-Type': 'application/json', ...options.headers },
+      ...options
+    });
+    let data;
+    try {
+      data = await res.json();
+    } catch (_) {
+      data = {};
+    }
+    if (!res.ok) {
+      throw new Error(data.error || `Request failed (${res.status})`);
+    }
+    return data;
+  } finally {
+    hideTopLoader();
   }
-  if (!res.ok) {
-    throw new Error(data.error || `Request failed (${res.status})`);
-  }
-  return data;
 }
 
 // Status & Priority mappers
@@ -181,6 +211,7 @@ const head = () => `
 `;
 
 function gate(m) {
+  dismissInitialLoader();
   S.me = null;
   app.innerHTML = `
     <main class="gate">
@@ -407,10 +438,12 @@ async function loadDataAndRender() {
       S.T = (tasks.tasks || []).map(mapTask);
       emp();
     }
+    dismissInitialLoader();
   } catch (err) {
     console.error('Data load error:', err);
     if (S.me.admin) admin();
     else emp();
+    dismissInitialLoader();
   }
 }
 
