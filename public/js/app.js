@@ -1,5 +1,5 @@
 /**
- * TetraSync Technologies - Client Application Controller
+ * Pentaryon Technology - Client Application Controller
  * High-craft UI/UX integrated with live Express & SQLite backend
  */
 
@@ -29,8 +29,8 @@ const ic = (n) =>
 
 const logo = (w = 32, full = false) =>
   full
-    ? `<img src="/assets/logo_full_dark.png" alt="TetraSync Technologies" style="height:${w}px; width:auto; max-width:100%; object-fit:contain; display:inline-block;" />`
-    : `<img src="/assets/logo_emblem_dark.png" alt="TetraSync" style="width:${w}px; height:${w}px; object-fit:contain; display:inline-block; vertical-align:middle; filter:drop-shadow(0 0 14px rgba(0,210,255,0.28));" />`;
+    ? `<img src="/assets/logo_full_dark.png" alt="Pentaryon Technology" style="height:${w}px; width:auto; max-width:100%; object-fit:contain; display:inline-block;" />`
+    : `<img src="/assets/logo_emblem_dark.png" alt="Pentaryon Technology" style="width:${w}px; height:${w}px; object-fit:contain; display:inline-block; vertical-align:middle; filter:drop-shadow(0 0 14px rgba(0,210,255,0.28));" />`;
 
 const DEPTS = ['Web Management', 'Digital Marketing', 'Cyber Security', 'Designer', 'Systems Eng'];
 const ST = ['Pending', 'In Progress', 'Under Review', 'Completed'];
@@ -220,7 +220,7 @@ const kpi = (l, v, c = '', x = '') => `
 const head = () => `
   <header class="hdr">
     ${logo(28)}
-    <b>TetraSync</b>
+    <b>Pentaryon</b>
     <span style="flex:1"></span>
     <span class="mono">${esc(S.me.u)}</span>
     <span class="badge ${S.me.admin ? 'cy' : ''} hide-s">${S.me.admin ? 'Executive Admin' : 'Employee'}</span>
@@ -237,7 +237,7 @@ function gate(m) {
         <div style="text-align:center">
           ${logo(68)}
           <h1 style="margin:10px 0 0;font-size:20px;letter-spacing:0.3px">Workplace Access Gate</h1>
-          <div class="mu mono" style="font-size:11px;margin-top:2px">TetraSync Technologies · Zero-trust entry</div>
+          <div class="mu mono" style="font-size:11px;margin-top:2px">Pentaryon Technology · Zero-trust entry</div>
         </div>
         <div class="seg" role="group" aria-label="Access type">
           ${[
@@ -402,7 +402,7 @@ function admin() {
       </div>
       ${body[S.tab]()}
       <footer style="text-align:center;padding:32px 0 16px;font-size:12px;color:var(--mu);font-family:var(--mono)">
-        &copy; 2026 TetraSync Technologies
+        &copy; 2026 Pentaryon Technology
       </footer>
     </main>
   `;
@@ -428,7 +428,7 @@ function emp() {
       <h3 style="margin:22px 0 12px">Priority Work Queue</h3>
       ${mine.length ? `<div class="grid">${mine.map((t) => card(t, 1)).join('')}</div>` : '<p class="mu">No assignments yet.</p>'}
       <footer style="text-align:center;padding:32px 0 16px;font-size:12px;color:var(--mu);font-family:var(--mono)">
-        &copy; 2026 TetraSync Technologies
+        &copy; 2026 Pentaryon Technology
       </footer>
     </main>
   `;

@@ -50,7 +50,7 @@ app.use(
         const originUrl = new URL(origin);
         const isLocal = originUrl.hostname === 'localhost' || originUrl.hostname === '127.0.0.1';
         const isVercel = originUrl.hostname.endsWith('.vercel.app');
-        const isCustomDomain = originUrl.hostname === 'tetrasync.tech' || originUrl.hostname.endsWith('.tetrasync.tech');
+        const isCustomDomain = originUrl.hostname === 'pentaryon.tech' || originUrl.hostname.endsWith('.pentaryon.tech') || originUrl.hostname === 'tetrasync.tech' || originUrl.hostname.endsWith('.tetrasync.tech');
         if (isLocal || isVercel || isCustomDomain) {
           return callback(null, true);
         }
@@ -71,7 +71,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get(['/api/meta', '/meta'], (req, res) => {
   res.json({
     departments: config.standardDepartments,
-    company: 'TetraSync Technologies',
+    company: 'Pentaryon Technology',
     storage: (config.tursoUrl && config.tursoAuthToken) ? 'turso' : 'sqlite',
     admins: config.admins.map(a => ({ name: a.name, username: a.username, department: a.department }))
   });
@@ -81,7 +81,7 @@ app.get(['/api/meta', '/meta'], (req, res) => {
 app.get(['/api', '/api/health', '/health'], (req, res) => {
   res.json({
     status: 'ok',
-    system: 'TetraSync Technologies Workplace Gate',
+    system: 'Pentaryon Technology Workplace Gate',
     version: '1.0.0',
     storage: (config.tursoUrl && config.tursoAuthToken) ? 'turso' : 'sqlite'
   });
@@ -147,7 +147,7 @@ process.on('unhandledRejection', (reason, promise) => {
 if (require.main === module) {
   const server = app.listen(config.port, () => {
     console.log(`=======================================================`);
-    console.log(` TetraSync Technologies - Work Portal & Clearance System `);
+    console.log(` Pentaryon Technology - Work Portal & Clearance System `);
     console.log(` Running on: http://localhost:${config.port}                `);
     console.log(` Environment: ${config.env}                             `);
     console.log(` Database: node:sqlite (WAL mode)                      `);

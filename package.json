@@ -1,5 +1,5 @@
 {
-  "name": "tetrasync-employee-portal",
+  "name": "pentaryon-work-portal",
   "version": "1.0.0",
   "description": "Executive Employee Portal, Work Assignment & Account Clearance System",
   "main": "server/index.js",
@@ -12,6 +12,7 @@
     "test": "node tests/portal_test.js"
   },
   "keywords": [
+    "pentaryon",
     "tetrasync",
     "work-portal",
     "employee-management",
@@ -20,7 +21,7 @@
     "express",
     "sqlite"
   ],
-  "author": "TetraSync Technologies",
+  "author": "Pentaryon Technology",
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {

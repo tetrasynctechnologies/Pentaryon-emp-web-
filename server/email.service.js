@@ -81,7 +81,7 @@ async function sendTaskAssignedEmail({ task, assignee, creator }) {
     .replace(/\n\n/g, '<br><br>')
     .replace(/\n/g, '<br>');
 
-  const subject = `[TetraSync Task] ${priorityStyle.label}: ${task.title}`;
+  const subject = `[Pentaryon Task] ${priorityStyle.label}: ${task.title}`;
 
   const html = `
 <!DOCTYPE html>
@@ -104,8 +104,8 @@ async function sendTaskAssignedEmail({ task, assignee, creator }) {
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
                 <tr>
                   <td>
-                    <span style="font-size:18px;font-weight:700;letter-spacing:1px;color:#38bdf8;">TETRASYNC</span>
-                    <span style="font-size:12px;color:#94a3b8;margin-left:8px;letter-spacing:0.5px;">TECHNOLOGIES</span>
+                    <span style="font-size:18px;font-weight:700;letter-spacing:1px;color:#38bdf8;">PENTARYON</span>
+                    <span style="font-size:12px;color:#94a3b8;margin-left:8px;letter-spacing:0.5px;">TECHNOLOGY</span>
                   </td>
                   <td align="right">
                     <span style="display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:0.5px;background-color:${priorityStyle.bg};border:1px solid ${priorityStyle.border};color:${priorityStyle.text};">
@@ -180,8 +180,8 @@ async function sendTaskAssignedEmail({ task, assignee, creator }) {
           <!-- Footer -->
           <tr>
             <td style="padding:20px 32px;background-color:#0f172a;border-top:1px solid #1f2937;font-size:11px;color:#64748b;line-height:1.5;">
-              <div>This is an automated operational briefing dispatched from the TetraSync Technologies Workplace Assignment Gate.</div>
-              <div style="margin-top:4px;">Official Dispatcher: <a href="mailto:${config.gmailUser}" style="color:#38bdf8;text-decoration:none;">${config.gmailUser}</a> &middot; &copy; 2026 TetraSync Technologies. Confidential.</div>
+              <div>This is an automated operational briefing dispatched from the Pentaryon Technology Workplace Assignment Gate.</div>
+              <div style="margin-top:4px;">Official Dispatcher: <a href="mailto:${config.gmailUser}" style="color:#38bdf8;text-decoration:none;">${config.gmailUser}</a> &middot; &copy; 2026 Pentaryon Technology. Confidential.</div>
             </td>
           </tr>
 
@@ -194,7 +194,7 @@ async function sendTaskAssignedEmail({ task, assignee, creator }) {
   `;
 
   const text = `
-TETRASYNC TECHNOLOGIES - NEW WORK ASSIGNMENT
+PENTARYON TECHNOLOGY - NEW WORK ASSIGNMENT
 -----------------------------------------------------------
 Priority: ${priorityStyle.label}
 Title: ${task.title}
@@ -210,13 +210,13 @@ ${portalUrl}
 
 --
 Official Dispatcher: ${config.gmailUser}
-Confidential. © 2026 TetraSync Technologies.
+Confidential. © 2026 Pentaryon Technology.
   `.trim();
 
   try {
     const info = await Promise.race([
       client.sendMail({
-        from: `"TetraSync Technologies" <${config.gmailUser}>`,
+        from: `"Pentaryon Technology" <${config.gmailUser}>`,
         to: recipientEmail,
         subject,
         text,
@@ -269,7 +269,7 @@ async function sendTaskCompletedEmail({ task, assignee, creator, milestoneNote }
     .replace(/\n\n/g, '<br><br>')
     .replace(/\n/g, '<br>');
 
-  const subject = `[TetraSync Milestone] COMPLETED: ${task.title}`;
+  const subject = `[Pentaryon Milestone] COMPLETED: ${task.title}`;
 
   const html = `
 <!DOCTYPE html>
@@ -292,7 +292,7 @@ async function sendTaskCompletedEmail({ task, assignee, creator, milestoneNote }
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
                 <tr>
                   <td>
-                    <span style="font-size:18px;font-weight:700;letter-spacing:1px;color:#34d399;">TETRASYNC</span>
+                    <span style="font-size:18px;font-weight:700;letter-spacing:1px;color:#34d399;">PENTARYON</span>
                     <span style="font-size:12px;color:#94a3b8;margin-left:8px;letter-spacing:0.5px;">OPERATIONS</span>
                   </td>
                   <td align="right">
@@ -368,9 +368,9 @@ async function sendTaskCompletedEmail({ task, assignee, creator, milestoneNote }
           <!-- Footer -->
           <tr>
             <td style="padding:20px 32px;background-color:#0f172a;border-top:1px solid #1f2937;font-size:11px;color:#64748b;line-height:1.5;">
-              <div>This is an automated operational briefing dispatched from the TetraSync Technologies Workplace Clearance Gate.</div>
+              <div>This is an automated operational briefing dispatched from the Pentaryon Technology Workplace Clearance Gate.</div>
               <div style="margin-top:4px;">Dispatched to: <strong>${toEmail}</strong>${ccEmails.length ? ` &middot; CC: ${ccEmails.join(', ')}` : ''}</div>
-              <div style="margin-top:4px;">Official Dispatcher: <a href="mailto:${config.gmailUser}" style="color:#34d399;text-decoration:none;">${config.gmailUser}</a> &middot; &copy; 2026 TetraSync Technologies. Confidential.</div>
+              <div style="margin-top:4px;">Official Dispatcher: <a href="mailto:${config.gmailUser}" style="color:#34d399;text-decoration:none;">${config.gmailUser}</a> &middot; &copy; 2026 Pentaryon Technology. Confidential.</div>
             </td>
           </tr>
 
@@ -383,7 +383,7 @@ async function sendTaskCompletedEmail({ task, assignee, creator, milestoneNote }
   `;
 
   const text = `
-TETRASYNC TECHNOLOGIES - WORK PACKAGE COMPLETED
+PENTARYON TECHNOLOGY - WORK PACKAGE COMPLETED
 -----------------------------------------------------------
 Status: 100% COMPLETED
 Title: ${task.title}
@@ -402,12 +402,12 @@ ${portalUrl}
 Recipient: ${toEmail}
 CC: ${ccEmails.join(', ')}
 Official Dispatcher: ${config.gmailUser}
-Confidential. © 2026 TetraSync Technologies.
+Confidential. © 2026 Pentaryon Technology.
   `.trim();
 
   try {
     const mailOptions = {
-      from: `"TetraSync Technologies" <${config.gmailUser}>`,
+      from: `"Pentaryon Technology" <${config.gmailUser}>`,
       to: toEmail,
       subject,
       text,

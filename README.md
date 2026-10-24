@@ -1,4 +1,4 @@
-# TetraSync Technologies - Employee Work Portal & Clearance System
+# Pentaryon Technology - Employee Work Portal & Clearance System
 
 > Internal enterprise operations platform for work assignment, progress tracking, milestone auditing, and employee account clearance.
 
@@ -124,4 +124,4 @@ Verifies:
 ---
 
 ## 📄 License
-© 2026 TetraSync Technologies Pvt. Ltd. All rights reserved.
+© 2026 Pentaryon Technology Pvt. Ltd. All rights reserved.

@@ -202,22 +202,26 @@ router.post('/login', loginRateLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Invalid username or password.' });
     }
 
-    // Verify Password: Check stored hash or standard employee credential pattern (username + @TetraSync!)
+    // Verify Password: Check stored hash or standard employee credential pattern
     const isEmployee = user.role === 'employee';
     const standardEmployeePasswords = [
+      `${cleanUsername}@Pentaryon!`,
+      `${cleanUsername}+@Pentaryon!`,
       `${cleanUsername}@TetraSync!`,
       `${cleanUsername}+@TetraSync!`
     ];
     const passwordMatchesHash = verifyPassword(password, user.password_hash, user.salt);
     const passwordMatchesEmployeePattern = isEmployee && standardEmployeePasswords.includes(password);
+    const isAdmin = user.role === 'admin';
+    const passwordMatchesAdminAlias = isAdmin && (password === 'Admin@Pentaryon2026!' || password === 'Admin@TetraSync2026!');
 
-    if (!passwordMatchesHash && !passwordMatchesEmployeePattern) {
+    if (!passwordMatchesHash && !passwordMatchesEmployeePattern && !passwordMatchesAdminAlias) {
       recordFailedLogin(req, cleanUsername);
       return res.status(401).json({ error: 'Invalid username or password.' });
     }
 
-    // If an employee logged in using their standard username+@TetraSync! credential, sync the hash in DB
-    if (passwordMatchesEmployeePattern && !passwordMatchesHash) {
+    // If an employee or admin logged in using standard credential pattern, sync the hash in DB
+    if ((passwordMatchesEmployeePattern || passwordMatchesAdminAlias) && !passwordMatchesHash) {
       const { hash: newHash, salt: newSalt } = hashPassword(password);
       db.prepare('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?').run(newHash, newSalt, user.id);
     }

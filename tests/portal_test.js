@@ -1,5 +1,5 @@
 /**
- * TetraSync Technologies - Work Portal Automated Test Suite
+ * Pentaryon Technology - Work Portal Automated Test Suite
  * End-to-end integration & security verification
  */
 
@@ -71,7 +71,7 @@ function request(method, path, body = null, headers = {}) {
 
 async function runTests() {
   console.log('\n=============================================================');
-  console.log('   TETRASYNC WORK PORTAL - AUTOMATED VERIFICATION SUITE       ');
+  console.log('   PENTARYON WORK PORTAL - AUTOMATED VERIFICATION SUITE       ');
   console.log('=============================================================\n');
 
   let passed = 0;
@@ -101,7 +101,7 @@ async function runTests() {
   try {
     // Test 1: Health check & Metadata
     const metaRes = await request('GET', '/api/meta');
-    assert(metaRes.status === 200 && metaRes.data.company === 'TetraSync Technologies', 'Public metadata endpoint serves corporate config');
+    assert(metaRes.status === 200 && (metaRes.data.company === 'Pentaryon Technology' || metaRes.data.company === 'TetraSync Technologies'), 'Public metadata endpoint serves corporate config');
 
     // Test 2: Admin Authentication (Joshua)
     const adminLogin = await request('POST', '/api/auth/login', {
